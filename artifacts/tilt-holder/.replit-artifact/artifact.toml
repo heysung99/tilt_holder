@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "TILT HOLDER"
+description = "A mobile-first web app scaffold for TILT HOLDER with four bottom tabs: game, settlement, rankings, and shared funds."
+version = "1.0.0"
+id = "artifacts/tilt-holder"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18962
+
+[services.development]
+run = "pnpm --filter @workspace/tilt-holder run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/tilt-holder", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/tilt-holder/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18962"
+BASE_PATH = "/"
