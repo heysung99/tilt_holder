@@ -12,15 +12,18 @@ import {
   ChevronRight,
   CirclePlus,
   Clock3,
+  Crown,
   Coins,
   Gamepad2,
   History,
   Landmark,
   Minus,
+  Pencil,
   Plus,
   ReceiptText,
   RotateCcw,
   Trophy,
+  UserPlus,
   Users,
   WalletCards,
 } from 'lucide-react';
@@ -30,7 +33,14 @@ import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 const queryClient = new QueryClient();
 
 type TabKey = 'game' | 'settle' | 'ranking' | 'fund';
-type PlayerName = (typeof players)[number]['name'];
+type PlayerName = string;
+
+type Player = {
+  name: PlayerName;
+  score: number;
+  color: string;
+  text: string;
+};
 
 type SessionState = {
   date: string;
@@ -38,6 +48,8 @@ type SessionState = {
   participantNames: PlayerName[];
   buyIns: Record<string, number>;
   finalAmounts: Record<string, number>;
+  hostName: PlayerName | null;
+  bankName: PlayerName | null;
   isFinished: boolean;
   fundApplied: boolean;
 };
@@ -61,9 +73,8 @@ type SettlementRow = {
   name: PlayerName;
   buyInTotal: number;
   finalAmount: number;
-  profit: number;
-  payout: number;
-  fundContribution: number;
+  result: number;
+  actualSettlement: number;
 };
 
 const navItems: Array<{ key: TabKey; label: string; path: string; icon: typeof Gamepad2 }> = [
@@ -73,15 +84,29 @@ const navItems: Array<{ key: TabKey; label: string; path: string; icon: typeof G
   { key: 'fund', label: '공금', path: '/fund', icon: WalletCards },
 ];
 
-const players = [
-  { name: '민준', score: 7, color: 'bg-[#dce6ff]', text: 'text-[#334b98]' },
-  { name: '서연', score: 5, color: 'bg-[#ffe0d7]', text: 'text-[#a44c3e]' },
-  { name: '도윤', score: 3, color: 'bg-[#e9edaa]', text: 'text-[#657117]' },
-  { name: '지우', score: 2, color: 'bg-[#e7defb]', text: 'text-[#67429a]' },
+const userNames = '김형석 황성욱 채민수 최종탁 한용규 염동엽 유진한 임근혁 김준형 하동선 이순용 김정현 성민 박경동 우제승 김우준 서지훈 고찬규 지도협 이민욱 영빈 심준성 이경배 이영훈 차재훈 곽성규 성친 안석진'.split(' ');
+const avatarStyles = [
+  ['bg-[#dce6ff]', 'text-[#334b98]'],
+  ['bg-[#ffe0d7]', 'text-[#a44c3e]'],
+  ['bg-[#e9edaa]', 'text-[#657117]'],
+  ['bg-[#e7defb]', 'text-[#67429a]'],
+  ['bg-[#d9f0ea]', 'text-[#28715d]'],
+  ['bg-[#f8e3bb]', 'text-[#9b6a1d]'],
 ];
+
+const initialPlayers: Player[] = userNames.map((name, index) => ({
+  name,
+  score: Math.max(0, 12 - index),
+  color: avatarStyles[index % avatarStyles.length][0],
+  text: avatarStyles[index % avatarStyles.length][1],
+}));
 
 function formatWon(value: number) {
   return `${value.toLocaleString('ko-KR')}원`;
+}
+
+function formatSignedWon(value: number) {
+  return `${value >= 0 ? '+' : '-'}${formatWon(Math.abs(value))}`;
 }
 
 function formatSessionDate(value: string) {
@@ -105,10 +130,12 @@ function readStored<T>(key: string, fallback: T): T {
 
 const initialSession: SessionState = {
   date: '2026-09-11',
-  gameName: '보난자',
-  participantNames: players.map((player) => player.name),
-  buyIns: { 민준: 1, 서연: 1, 도윤: 1, 지우: 1 },
-  finalAmounts: { 민준: 160000, 서연: 100000, 도윤: 80000, 지우: 60000 },
+  gameName: '오늘의 게임',
+  participantNames: initialPlayers.slice(0, 4).map((player) => player.name),
+  buyIns: { 김형석: 1, 황성욱: 1, 채민수: 1, 최종탁: 1 },
+  finalAmounts: { 김형석: 80000, 황성욱: 50000, 채민수: 40000, 최종탁: 30000 },
+  hostName: '김형석',
+  bankName: '황성욱',
   isFinished: false,
   fundApplied: false,
 };
@@ -126,39 +153,46 @@ const initialFundEntries: FundEntry[] = [
 
 function AppShell() {
   const [activeTab, setActiveTab] = useState<TabKey>('game');
-  const [session, setSession] = useState<SessionState>(() => readStored('tilt-holder-session', initialSession));
-  const [expenses, setExpenses] = useState<ExpenseEntry[]>(() => readStored('tilt-holder-expenses', initialExpenses));
-  const [fundEntries, setFundEntries] = useState<FundEntry[]>(() => readStored('tilt-holder-fund-entries', initialFundEntries));
+  const [users, setUsers] = useState<Player[]>(() => readStored('tilt-holder-users-v2', initialPlayers));
+  const [session, setSession] = useState<SessionState>(() => readStored('tilt-holder-session-v2', initialSession));
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>(() => readStored('tilt-holder-expenses-v2', initialExpenses));
+  const [fundEntries, setFundEntries] = useState<FundEntry[]>(() => readStored('tilt-holder-fund-entries-v2', initialFundEntries));
 
   useEffect(() => {
-    window.localStorage.setItem('tilt-holder-session', JSON.stringify(session));
+    window.localStorage.setItem('tilt-holder-users-v2', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
+    window.localStorage.setItem('tilt-holder-session-v2', JSON.stringify(session));
   }, [session]);
 
   useEffect(() => {
-    window.localStorage.setItem('tilt-holder-expenses', JSON.stringify(expenses));
+    window.localStorage.setItem('tilt-holder-expenses-v2', JSON.stringify(expenses));
   }, [expenses]);
 
   useEffect(() => {
-    window.localStorage.setItem('tilt-holder-fund-entries', JSON.stringify(fundEntries));
+    window.localStorage.setItem('tilt-holder-fund-entries-v2', JSON.stringify(fundEntries));
   }, [fundEntries]);
 
-  const participantDetails = players.filter((player) => session.participantNames.includes(player.name));
+  const participantDetails = users.filter((player) => session.participantNames.includes(player.name));
   const settlementRows: SettlementRow[] = participantDetails.map((player) => {
-    const buyInTotal = (session.buyIns[player.name] ?? 0) * 100000;
+    const buyInTotal = (session.buyIns[player.name] ?? 0) * 50000;
     const finalAmount = session.finalAmounts[player.name] ?? 0;
-    const profit = Math.max(finalAmount - buyInTotal, 0);
-    const fundContribution = Math.round(profit * 0.5);
-    const payout = finalAmount > buyInTotal
-      ? buyInTotal + fundContribution
-      : finalAmount;
+    const result = finalAmount - buyInTotal;
+    const actualSettlement = result > 0 ? Math.round(result * 0.5) : result;
 
-    return { name: player.name, buyInTotal, finalAmount, profit, payout, fundContribution };
+    return { name: player.name, buyInTotal, finalAmount, result, actualSettlement };
   });
-  const fundContribution = settlementRows.reduce((total, row) => total + row.fundContribution, 0);
-  const totalPayout = settlementRows.reduce((total, row) => total + row.payout, 0);
+  const expenseTotal = expenses.reduce((total, expense) => total + expense.amount, 0);
+  const lossTotal = settlementRows.reduce((total, row) => total + (row.actualSettlement < 0 ? Math.abs(row.actualSettlement) : 0), 0);
+  const totalPayout = settlementRows.reduce((total, row) => total + (row.actualSettlement > 0 ? row.actualSettlement : 0), 0);
+  const grossFundContribution = lossTotal - totalPayout;
+  const finalFundAmount = grossFundContribution - expenseTotal;
+  const totalBuyIns = settlementRows.reduce((total, row) => total + row.buyInTotal, 0);
+  const totalFinalChips = settlementRows.reduce((total, row) => total + row.finalAmount, 0);
   const fundBalance = fundEntries.reduce((total, entry) => total + entry.amount, 0);
 
-  const createSession = (draft: { date: string; gameName: string; participantNames: PlayerName[] }) => {
+  const createSession = (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => {
     setSession({
       ...draft,
       buyIns: makeAmountRecord(draft.participantNames, 1),
@@ -189,6 +223,42 @@ function AppShell() {
     }));
   };
 
+  const addUser = (name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName || users.some((user) => user.name === trimmedName)) return false;
+    const style = avatarStyles[users.length % avatarStyles.length];
+    setUsers((current) => [...current, { name: trimmedName, score: 0, color: style[0], text: style[1] }]);
+    return true;
+  };
+
+  const renameUser = (currentName: PlayerName, nextName: string) => {
+    const trimmedName = nextName.trim();
+    if (!trimmedName || currentName === trimmedName || users.some((user) => user.name === trimmedName)) return false;
+    setUsers((current) => current.map((user) => user.name === currentName ? { ...user, name: trimmedName } : user));
+    setSession((current) => {
+      const participantNames = current.participantNames.map((name) => name === currentName ? trimmedName : name);
+      const buyIns = { ...current.buyIns };
+      const finalAmounts = { ...current.finalAmounts };
+      if (currentName in buyIns) {
+        buyIns[trimmedName] = buyIns[currentName];
+        delete buyIns[currentName];
+      }
+      if (currentName in finalAmounts) {
+        finalAmounts[trimmedName] = finalAmounts[currentName];
+        delete finalAmounts[currentName];
+      }
+      return {
+        ...current,
+        participantNames,
+        buyIns,
+        finalAmounts,
+        hostName: current.hostName === currentName ? trimmedName : current.hostName,
+        bankName: current.bankName === currentName ? trimmedName : current.bankName,
+      };
+    });
+    return true;
+  };
+
   const addExpense = (title: string, amount: number) => {
     const id = `expense-${Date.now()}`;
     const expense = { id, title, payer: '모임 공금', amount, time: '방금 전' };
@@ -209,18 +279,34 @@ function AppShell() {
 
   const finishSession = () => {
     if (session.fundApplied) return;
-    if (fundContribution > 0) {
+    if (grossFundContribution !== 0) {
       setFundEntries((current) => [
         ...current,
         {
           id: `game-${session.date}-${session.gameName}`,
-          title: `${session.gameName} 승리금 공금 귀속`,
-          meta: `${formatSessionDate(session.date)} · 딴 돈의 50%`,
-          amount: fundContribution,
+          title: `${session.gameName} 정산 공금`,
+          meta: `${formatSessionDate(session.date)} · 손실금 - 지급액`,
+          amount: grossFundContribution,
         },
       ]);
     }
     setSession((current) => ({ ...current, isFinished: true, fundApplied: true }));
+  };
+
+  const completeSettlement = () => {
+    if (totalBuyIns !== totalFinalChips) {
+      window.alert('정산이 제대로 되지 않았습니다.');
+      return;
+    }
+    window.alert('정산이 완료되었습니다.');
+    console.log({
+      session,
+      settlementRows,
+      totalBuyIns,
+      totalFinalChips,
+      finalFundAmount,
+    });
+    finishSession();
   };
 
   return (
@@ -250,8 +336,11 @@ function AppShell() {
         {activeTab === 'game' && (
           <GameScreen
             session={session}
+            users={users}
             onCreateSession={createSession}
             onBuyInChange={updateBuyIn}
+            onAddUser={addUser}
+            onRenameUser={renameUser}
           />
         )}
         {activeTab === 'settle' && (
@@ -259,15 +348,18 @@ function AppShell() {
             session={session}
             expenses={expenses}
             settlementRows={settlementRows}
-            fundContribution={fundContribution}
+            grossFundContribution={grossFundContribution}
+            finalFundAmount={finalFundAmount}
             totalPayout={totalPayout}
             fundBalance={fundBalance}
+            totalBuyIns={totalBuyIns}
+            totalFinalChips={totalFinalChips}
             onFinalAmountChange={updateFinalAmount}
             onAddExpense={addExpense}
-            onFinishSession={finishSession}
+            onFinishSession={completeSettlement}
           />
         )}
-        {activeTab === 'ranking' && <RankingScreen />}
+        {activeTab === 'ranking' && <RankingScreen users={users} />}
         {activeTab === 'fund' && (
           <FundScreen
             fundEntries={fundEntries}
@@ -293,12 +385,18 @@ function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: 
 
 function GameScreen({
   session,
+  users,
   onCreateSession,
   onBuyInChange,
+  onAddUser,
+  onRenameUser,
 }: {
   session: SessionState;
-  onCreateSession: (draft: { date: string; gameName: string; participantNames: PlayerName[] }) => void;
+  users: Player[];
+  onCreateSession: (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => void;
   onBuyInChange: (name: PlayerName, delta: number) => void;
+  onAddUser: (name: string) => boolean;
+  onRenameUser: (currentName: PlayerName, nextName: string) => boolean;
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -306,6 +404,17 @@ function GameScreen({
 
   return (
     <div>
+      <button
+        type="button"
+        className="tilt-button rise-in mb-6 flex w-full items-center justify-between rounded-[18px] bg-[#2d3d8f] px-5 py-4 text-left text-white shadow-[0_12px_28px_rgba(45,61,143,.18)] hover:bg-[#202e74]"
+        data-testid="button-open-game"
+        onClick={() => setShowNewGame((current) => !current)}
+      >
+        <span><span className="mono block text-[10px] font-bold uppercase tracking-[0.16em] text-[#cbd1f2]">new game</span><span className="mt-1 block text-lg font-bold">게임 개설</span></span>
+        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e9ef76] text-[#2d3d8f]"><CirclePlus size={20} /></span>
+      </button>
+      {showNewGame ? <NewSessionForm users={users} currentSession={session} onCreate={(draft) => { onCreateSession(draft); setShowNewGame(false); setIsPlaying(false); }} onAddUser={onAddUser} onRenameUser={onRenameUser} /> : null}
+
       <PageHeading
         eyebrow={`게임 세션 · ${formatSessionDate(session.date)}`}
         title={isPlaying ? '좋아, 다음 라운드.' : '한 판 더,\n가볍게 시작해요.'}
@@ -321,13 +430,17 @@ function GameScreen({
           <span className="rounded-full bg-[#e9ef76] px-3 py-1.5 text-[11px] font-bold text-[#2d3d8f]">{session.participantNames.length}명 참여</span>
         </div>
         <div className="mx-5 grid grid-cols-4 gap-2 border-t border-white/15 py-5 sm:mx-7">
-          {players.filter((player) => session.participantNames.includes(player.name)).map((player) => (
+          {users.filter((player) => session.participantNames.includes(player.name)).map((player) => (
             <div key={player.name} className="text-center">
               <div className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ${player.color} ${player.text}`}>
                 {player.name.slice(0, 1)}
               </div>
               <p className="mt-2 text-[11px] text-[#d7dbf1]">{player.name}</p>
               <p className="mono mt-1 text-[14px] font-bold">{session.buyIns[player.name] ?? 0}<span className="ml-1 text-[10px] font-normal text-[#cbd1f2]">회</span></p>
+              <div className="mt-1 flex justify-center gap-1 text-[8px] font-bold uppercase tracking-wide text-[#cbd1f2]">
+                {session.hostName === player.name ? <span>HOST</span> : null}
+                {session.bankName === player.name ? <span>BANK</span> : null}
+              </div>
             </div>
           ))}
         </div>
@@ -354,10 +467,10 @@ function GameScreen({
             <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">live buy-in</p>
             <h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">바이인 횟수 기록</h3>
           </div>
-          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#2d3d8f]">1회 = 100,000원</span>
+          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#2d3d8f]">1회 = 50,000원</span>
         </div>
         <div className="space-y-2">
-          {players.filter((player) => session.participantNames.includes(player.name)).map((player) => (
+          {users.filter((player) => session.participantNames.includes(player.name)).map((player) => (
             <div key={player.name} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5">
               <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ${player.color} ${player.text}`}>{player.name.slice(0, 1)}</div>
               <span className="flex-1 text-sm font-bold text-[#20253a]">{player.name}</span>
@@ -379,8 +492,6 @@ function GameScreen({
           <span><span className="block text-sm font-bold text-[#20253a]">지난 기록</span><span className="mt-1 block text-xs text-[#697087]">오늘 2게임 완료</span></span>
         </button>
       </section>
-
-      {showNewGame ? <NewSessionForm currentSession={session} onCreate={(draft) => { onCreateSession(draft); setShowNewGame(false); setIsPlaying(false); }} /> : null}
 
       {showHistory ? (
         <section className="rise-in mt-6 rounded-[18px] border border-dashed border-[#d8d9df] bg-[#fafaf6] p-5" data-testid="panel-game-history">
@@ -410,20 +521,37 @@ function GameScreen({
 }
 
 function NewSessionForm({
+  users,
   currentSession,
   onCreate,
+  onAddUser,
+  onRenameUser,
 }: {
+  users: Player[];
   currentSession: SessionState;
-  onCreate: (draft: { date: string; gameName: string; participantNames: PlayerName[] }) => void;
+  onCreate: (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => void;
+  onAddUser: (name: string) => boolean;
+  onRenameUser: (currentName: PlayerName, nextName: string) => boolean;
 }) {
   const [date, setDate] = useState(currentSession.date);
   const [gameName, setGameName] = useState(currentSession.gameName);
   const [participantNames, setParticipantNames] = useState<PlayerName[]>(currentSession.participantNames);
+  const [hostName, setHostName] = useState<PlayerName | null>(currentSession.hostName);
+  const [bankName, setBankName] = useState<PlayerName | null>(currentSession.bankName);
+  const [newUserName, setNewUserName] = useState('');
+  const [editingName, setEditingName] = useState<PlayerName | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   const toggleParticipant = (name: PlayerName) => {
-    setParticipantNames((current) => current.includes(name)
-      ? current.filter((item) => item !== name)
-      : [...current, name]);
+    setParticipantNames((current) => {
+      if (current.includes(name)) {
+        const next = current.filter((item) => item !== name);
+        if (hostName === name) setHostName(next[0] ?? null);
+        if (bankName === name) setBankName(next[0] ?? null);
+        return next;
+      }
+      return [...current, name];
+    });
   };
 
   return (
@@ -433,7 +561,7 @@ function NewSessionForm({
       onSubmit={(event) => {
         event.preventDefault();
         if (participantNames.length > 0 && gameName.trim()) {
-          onCreate({ date, gameName: gameName.trim(), participantNames });
+          onCreate({ date, gameName: gameName.trim(), participantNames, hostName: hostName!, bankName: bankName! });
         }
       }}
     >
@@ -446,17 +574,44 @@ function NewSessionForm({
         <label className="text-xs font-semibold text-[#596078]">게임 이름<input value={gameName} onChange={(event) => setGameName(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm text-[#20253a] outline-none focus:border-[#2d3d8f]" placeholder="예: 보난자" data-testid="input-session-name" /></label>
       </div>
       <fieldset className="mt-4">
-        <legend className="text-xs font-semibold text-[#596078]">참가자 선택</legend>
+        <legend className="flex items-center gap-1.5 text-xs font-semibold text-[#596078]"><Crown size={13} className="text-[#2d3d8f]" /> 참가자 선택 · 역할 지정</legend>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          {players.map((player) => {
+          {users.map((player) => {
             const selected = participantNames.includes(player.name);
-            return <button key={player.name} type="button" className={`tilt-button flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold ${selected ? 'border-[#bfc7f0] bg-[#eef0ff] text-[#2d3d8f]' : 'border-[#e4e5ea] bg-white text-[#858a9b]'}`} data-testid={`button-select-participant-${player.name}`} onClick={() => toggleParticipant(player.name)}><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${player.color} ${player.text}`}>{selected ? <Check size={14} /> : player.name.slice(0, 1)}</span>{player.name}</button>;
+            return <div key={player.name} className={`rounded-xl border p-2 ${selected ? 'border-[#bfc7f0] bg-[#eef0ff]' : 'border-[#e4e5ea] bg-white'}`}>
+              <button type="button" className={`tilt-button flex w-full items-center gap-2 text-left text-sm font-semibold ${selected ? 'text-[#2d3d8f]' : 'text-[#858a9b]'}`} data-testid={`button-select-participant-${player.name}`} onClick={() => toggleParticipant(player.name)}><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${player.color} ${player.text}`}>{selected ? <Check size={14} /> : player.name.slice(0, 1)}</span><span className="min-w-0 flex-1 truncate">{player.name}</span></button>
+              <div className="mt-2 flex items-center justify-between gap-1 border-t border-[#ececf0] pt-2 text-[9px] font-bold tracking-wide">
+                <label className={`flex items-center gap-1 ${selected ? 'text-[#2d3d8f]' : 'text-[#b1b4bf]'}`}><input type="radio" name="host-player" checked={hostName === player.name} disabled={!selected} onChange={() => setHostName(player.name)} /> HOST</label>
+                <label className={`flex items-center gap-1 ${selected ? 'text-[#bd604d]' : 'text-[#b1b4bf]'}`}><input type="radio" name="bank-player" checked={bankName === player.name} disabled={!selected} onChange={() => setBankName(player.name)} /> BANK</label>
+              </div>
+            </div>;
           })}
         </div>
       </fieldset>
+      <div className="mt-4 rounded-xl bg-[#fafaf6] p-3">
+        <div className="flex items-center gap-2"><UserPlus size={15} className="text-[#2d3d8f]" /><p className="text-xs font-bold text-[#20253a]">유저 관리</p></div>
+        <div className="mt-2 flex gap-2">
+          <input value={newUserName} onChange={(event) => setNewUserName(event.target.value)} className="h-10 min-w-0 flex-1 rounded-lg border border-[#dfe1ee] bg-white px-3 text-sm outline-none focus:border-[#2d3d8f]" placeholder="새 유저명" data-testid="input-new-user-name" />
+          <button type="button" className="tilt-button rounded-lg bg-[#2d3d8f] px-3 text-xs font-bold text-white" data-testid="button-add-user" onClick={() => { if (onAddUser(newUserName)) setNewUserName(''); }}>추가</button>
+        </div>
+        <div className="mt-3 space-y-2">
+          {users.map((user) => editingName === user.name ? (
+            <div key={user.name} className="flex gap-2">
+              <input value={editingValue} onChange={(event) => setEditingValue(event.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border border-[#dfe1ee] bg-white px-2 text-sm outline-none focus:border-[#2d3d8f]" autoFocus data-testid={`input-edit-user-${user.name}`} />
+              <button type="button" className="text-xs font-bold text-[#2d3d8f]" onClick={() => { if (onRenameUser(user.name, editingValue)) { setEditingName(null); setEditingValue(''); } }}>저장</button>
+              <button type="button" className="text-xs text-[#858a9b]" onClick={() => setEditingName(null)}>취소</button>
+            </div>
+          ) : (
+            <div key={user.name} className="flex items-center justify-between text-xs text-[#697087]">
+              <span>{user.name}</span>
+              <button type="button" className="flex items-center gap-1 text-[#2d3d8f]" data-testid={`button-edit-user-${user.name}`} onClick={() => { setEditingName(user.name); setEditingValue(user.name); }}><Pencil size={12} /> 수정</button>
+            </div>
+          ))}
+        </div>
+      </div>
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-xs text-[#858a9b]">{participantNames.length}명 선택됨</p>
-        <button type="submit" disabled={!gameName.trim() || participantNames.length === 0} className="tilt-button rounded-xl bg-[#2d3d8f] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-create-session">게임 세션 생성</button>
+        <button type="submit" disabled={!gameName.trim() || participantNames.length === 0 || !hostName || !bankName} className="tilt-button rounded-xl bg-[#2d3d8f] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-create-session">참가자 선택 완료</button>
       </div>
     </form>
   );
@@ -476,9 +631,12 @@ function SettleScreen({
   session,
   expenses,
   settlementRows,
-  fundContribution,
+  grossFundContribution,
+  finalFundAmount,
   totalPayout,
   fundBalance,
+  totalBuyIns,
+  totalFinalChips,
   onFinalAmountChange,
   onAddExpense,
   onFinishSession,
@@ -486,9 +644,12 @@ function SettleScreen({
   session: SessionState;
   expenses: ExpenseEntry[];
   settlementRows: SettlementRow[];
-  fundContribution: number;
+  grossFundContribution: number;
+  finalFundAmount: number;
   totalPayout: number;
   fundBalance: number;
+  totalBuyIns: number;
+  totalFinalChips: number;
   onFinalAmountChange: (name: PlayerName, value: number) => void;
   onAddExpense: (title: string, amount: number) => void;
   onFinishSession: () => void;
@@ -497,7 +658,7 @@ function SettleScreen({
   const [settled, setSettled] = useState<string[]>([]);
   const [newExpense, setNewExpense] = useState({ title: '', amount: '' });
   const expenseTotal = expenses.reduce((total, expense) => total + expense.amount, 0);
-  const projectedFundBalance = session.fundApplied ? fundBalance : fundBalance + fundContribution;
+  const projectedFundBalance = session.fundApplied ? fundBalance : fundBalance + grossFundContribution;
 
   const markSettled = (id: string) => setSettled((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
 
@@ -506,11 +667,11 @@ function SettleScreen({
       <PageHeading eyebrow="round expenses" title="정산은 여기서\n한 번에 끝내요." description="누가 먼저 냈는지만 적어두면, 각자 보낼 금액을 깔끔하게 정리해드려요." />
       <section className="rise-in delay-1 tilt-card bg-[#e9ef76] p-5 sm:p-7" data-testid="card-settlement-summary">
         <div className="flex items-end justify-between">
-          <div><p className="text-sm font-semibold text-[#596313]">총 지급 예정액</p><p className="mono mt-2 text-[28px] font-bold tracking-[-0.08em] text-[#20253a]">{formatWon(totalPayout)}</p></div>
-          <div className="text-right"><p className="text-xs text-[#596313]">{settlementRows.length}명이 참여</p><p className="mt-1 text-sm font-bold text-[#20253a]">{formatWon(expenseTotal)} 공유 지출</p></div>
+          <div><p className="text-sm font-semibold text-[#596313]">플러스 플레이어 지급액</p><p className="mono mt-2 text-[28px] font-bold tracking-[-0.08em] text-[#20253a]">{formatWon(totalPayout)}</p></div>
+          <div className="text-right"><p className="text-xs text-[#596313]">{settlementRows.length}명이 참여</p><p className="mt-1 text-sm font-bold text-[#20253a]">바이인 {formatWon(totalBuyIns)}</p></div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-2 border-t border-[#cfd66c] pt-4">
-          <div><p className="text-xs text-[#596313]">공금 귀속 예정</p><p className="mono mt-1 text-lg font-bold text-[#20253a]">{formatWon(fundContribution)}</p></div>
+          <div><p className="text-xs text-[#596313]">오늘 최종 공금액</p><p className="mono mt-1 text-lg font-bold text-[#20253a]">{formatSignedWon(finalFundAmount)}</p></div>
           <div className="text-right"><p className="text-xs text-[#596313]">종료 후 공금 잔액</p><p className="mono mt-1 text-lg font-bold text-[#20253a]">{formatWon(projectedFundBalance)}</p></div>
         </div>
       </section>
@@ -535,15 +696,15 @@ function SettleScreen({
                 <label className="text-right text-[10px] font-semibold text-[#858a9b]">최종 금액<input value={row.finalAmount || ''} onChange={(event) => onFinalAmountChange(row.name, Number(event.target.value.replace(/[^0-9]/g, '')) || 0)} inputMode="numeric" className="mt-1 h-9 w-[116px] rounded-lg border border-[#dfe1ee] bg-white px-2 text-right text-sm font-bold text-[#20253a] outline-none focus:border-[#2d3d8f]" placeholder="0" data-testid={`input-final-amount-${row.name}`} /></label>
               </div>
               <div className="mt-3 flex items-center justify-between rounded-xl bg-[#fafaf6] px-3 py-2.5 text-xs">
-                <span className="text-[#697087]">{row.profit > 0 ? `딴 돈 ${formatWon(row.profit)}` : '손실/원금 범위'}</span>
-                <span className="font-bold text-[#2d3d8f]">{formatWon(row.payout)} 지급{row.fundContribution > 0 ? ` · 공금 ${formatWon(row.fundContribution)}` : ''}</span>
+                <span className={row.result >= 0 ? 'text-[#657117]' : 'text-[#bd604d]'}>최종 결과 {formatSignedWon(row.result)}</span>
+                <span className={`font-bold ${row.actualSettlement >= 0 ? 'text-[#2d3d8f]' : 'text-[#bd604d]'}`}>실제 정산액 {formatSignedWon(row.actualSettlement)}</span>
               </div>
             </div>
           ))}
         </div>
       </div>
       <div className="rise-in delay-2 mt-6 flex items-center justify-between">
-        <div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">expense list</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">공유 지출</h3></div>
+        <div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">today expenses</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">당일 사용 지출</h3></div>
         <button type="button" className="tilt-button flex items-center gap-1.5 rounded-full bg-[#2d3d8f] px-3.5 py-2.5 text-xs font-bold text-[#f7f7ed] hover:bg-[#202e74]" data-testid="button-add-expense" onClick={() => setShowExpense((current) => !current)}><Plus size={15} /> 지출 추가</button>
       </div>
       {showExpense ? (
@@ -566,21 +727,22 @@ function SettleScreen({
         })}
       </div>
       <section className="rise-in delay-4 mt-8 rounded-[18px] border border-[#d8d9df] bg-white p-4" data-testid="card-fund-final-preview">
-        <div className="flex items-start gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef3c5] text-[#657117]"><Landmark size={17} /></div><div className="flex-1"><p className="text-sm font-bold text-[#20253a]">당일 최종 공금 잔액</p><p className="mt-1 text-xs leading-5 text-[#697087]">기존 잔액 {formatWon(fundBalance)} + 자동 귀속 {formatWon(fundContribution)} 기준</p></div><p className="mono text-lg font-bold text-[#20253a]">{formatWon(projectedFundBalance)}</p></div>
-        <button type="button" className="tilt-button mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#2d3d8f] px-4 py-3 text-xs font-bold text-white hover:bg-[#202e74] disabled:cursor-not-allowed disabled:opacity-50" data-testid="button-finish-session" onClick={onFinishSession} disabled={session.fundApplied}><Check size={15} />{session.fundApplied ? '게임 종료 및 공금 귀속 완료' : '게임 종료 · 공금 귀속'}</button>
+        <div className="flex items-start gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef3c5] text-[#657117]"><Landmark size={17} /></div><div className="flex-1"><p className="text-sm font-bold text-[#20253a]">최종 공금액 계산</p><p className="mt-1 text-xs leading-5 text-[#697087]">손실금 {formatWon(settlementRows.reduce((total, row) => total + (row.actualSettlement < 0 ? Math.abs(row.actualSettlement) : 0), 0))} - 지급액 {formatWon(totalPayout)} - 지출 {formatWon(expenseTotal)}</p></div><p className="mono text-lg font-bold text-[#20253a]">{formatSignedWon(finalFundAmount)}</p></div>
+        <div className="mt-3 flex items-center justify-between rounded-xl bg-[#fafaf6] px-3 py-2 text-xs"><span className="text-[#697087]">칩 합계 검증</span><span className={totalBuyIns === totalFinalChips ? 'font-bold text-[#657117]' : 'font-bold text-[#bd604d]'}>{formatWon(totalFinalChips)} / {formatWon(totalBuyIns)} {totalBuyIns === totalFinalChips ? '일치' : '불일치'}</span></div>
+        <button type="button" className="tilt-button mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#2d3d8f] px-4 py-3 text-xs font-bold text-white hover:bg-[#202e74] disabled:cursor-not-allowed disabled:opacity-50" data-testid="button-settle-session" onClick={onFinishSession} disabled={session.fundApplied}><Check size={15} />{session.fundApplied ? '정산 완료' : '정산하기'}</button>
       </section>
     </div>
   );
 }
 
-function RankingScreen() {
+function RankingScreen({ users }: { users: Player[] }) {
   return (
     <div>
       <PageHeading eyebrow="season score · 4 games" title="오늘의 플레이어는\n누구였을까요?" description="이번 모임에서 쌓인 승점을 기준으로 정리했어요. 다음 판의 작은 긴장감을 위해." />
       <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
         <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">standings</span><span className="text-xs text-[#858a9b]">승점 기준</span></div>
         <div className="divide-y divide-[#ececf0]">
-          {players.map((player, index) => <div className="flex items-center gap-4 px-5 py-4" key={player.name} data-testid={`row-ranking-${player.name}`}>
+          {users.slice(0, 10).map((player, index) => <div className="flex items-center gap-4 px-5 py-4" key={player.name} data-testid={`row-ranking-${player.name}`}>
             <span className={`mono flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${index === 0 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>{String(index + 1).padStart(2, '0')}</span>
             <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${player.color} ${player.text}`}>{player.name.slice(0, 1)}</div>
             <div className="flex-1"><p className="text-sm font-bold text-[#20253a]">{player.name}{index === 0 ? <span className="ml-2 rounded-full bg-[#eef0ff] px-2 py-1 text-[10px] text-[#2d3d8f]">리더</span> : null}</p><p className="mt-1 text-xs text-[#858a9b]">{index === 0 ? '최근 2게임 연속 1위' : `${index + 1}게임 참여`}</p></div>
