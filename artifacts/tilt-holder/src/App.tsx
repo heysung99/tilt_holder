@@ -24,7 +24,6 @@ import {
   RotateCcw,
   Trophy,
   UserPlus,
-  Users,
   WalletCards,
 } from 'lucide-react';
 import { historyDates, historicalRecords } from '@/data/history';
@@ -154,13 +153,13 @@ const initialFundEntries: FundEntry[] = [
 
 function AppShell() {
   const [activeTab, setActiveTab] = useState<TabKey>('game');
-  const [users, setUsers] = useState<Player[]>(() => readStored('tilt-holder-users-v2', initialPlayers));
+  const [users, setUsers] = useState<Player[]>(() => readStored('tilt-holder-users-v3', initialPlayers));
   const [session, setSession] = useState<SessionState>(() => readStored('tilt-holder-session-v2', initialSession));
   const [expenses, setExpenses] = useState<ExpenseEntry[]>(() => readStored('tilt-holder-expenses-v2', initialExpenses));
   const [fundEntries, setFundEntries] = useState<FundEntry[]>(() => readStored('tilt-holder-fund-entries-v2', initialFundEntries));
 
   useEffect(() => {
-    window.localStorage.setItem('tilt-holder-users-v2', JSON.stringify(users));
+    window.localStorage.setItem('tilt-holder-users-v3', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
@@ -313,25 +312,8 @@ function AppShell() {
   return (
     <div className="tilt-shell">
       <main className="tilt-container page-enter pb-32 pt-6 sm:pt-9">
-        <header className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-[14px] bg-[#2d3d8f] text-[#f7f7ed] shadow-[4px_4px_0_#dfe78a]">
-              <span className="mono text-[15px] font-bold tracking-[-0.12em]">TH</span>
-            </div>
-            <div>
-              <p className="mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#697087]">quick scorekeeper</p>
-              <h1 className="text-[18px] font-bold tracking-[-0.04em] text-[#20253a]">TILT HOLDER</h1>
-            </div>
-          </div>
-          <button
-            type="button"
-            className="tilt-button flex h-10 items-center gap-2 rounded-full border border-[#e2e3e8] bg-white px-3 text-xs font-semibold text-[#4a5063] shadow-sm hover:bg-[#f6f6f2]"
-            data-testid="button-group-selector"
-            onClick={() => window.alert('현재 모임: 금요일 보드게임')}
-          >
-            <Users size={15} strokeWidth={2.2} />
-            <span>금요일 모임</span>
-          </button>
+        <header className="mb-8">
+          <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
         </header>
 
         {activeTab === 'game' && (
@@ -507,16 +489,6 @@ function GameScreen({
         </section>
       ) : null}
 
-      <section className="rise-in delay-3 mt-8">
-        <div className="mb-3 flex items-center justify-between">
-          <div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">next up</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">다음 게임 후보</h3></div>
-          <button type="button" className="flex items-center gap-1 text-xs font-bold text-[#2d3d8f]" data-testid="button-edit-queue" onClick={() => window.alert('게임 후보는 현재 순서대로 준비되어 있어요.')}>순서 편집 <ChevronRight size={14} /></button>
-        </div>
-        <div className="tilt-card divide-y divide-[#ececf0]">
-          <QueueRow index="01" title="스플렌더" meta="약 30분 · 2–4명" />
-          <QueueRow index="02" title="카탄" meta="약 60분 · 3–4명" />
-        </div>
-      </section>
     </div>
   );
 }
@@ -615,16 +587,6 @@ function NewSessionForm({
         <button type="submit" disabled={!gameName.trim() || participantNames.length === 0 || !hostName || !bankName} className="tilt-button rounded-xl bg-[#2d3d8f] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-create-session">참가자 선택 완료</button>
       </div>
     </form>
-  );
-}
-
-function QueueRow({ index, title, meta }: { index: string; title: string; meta: string }) {
-  return (
-    <button type="button" className="tilt-button flex w-full items-center gap-4 p-4 text-left hover:bg-[#fbfbf8]" data-testid={`button-queue-${index}`}>
-      <span className="mono text-[11px] text-[#a0a4b1]">{index}</span>
-      <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-[#20253a]">{title}</span><span className="mt-1 block text-xs text-[#858a9b]">{meta}</span></span>
-      <ChevronRight size={16} className="text-[#a0a4b1]" />
-    </button>
   );
 }
 
@@ -755,46 +717,42 @@ function RankingScreen({ users }: { users: Player[] }) {
       const values = record?.values ?? [];
       const playedValues = values.filter((value): value is number => value !== null);
       const wins = playedValues.filter((value) => value > 0).length;
-      const winnings = playedValues.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
+      const net = playedValues.reduce((sum, value) => sum + value, 0);
       return {
         player,
         played: playedValues.length,
         wins,
         losses: playedValues.length - wins,
-        winnings,
+        net,
         winRate: playedValues.length ? wins / playedValues.length : 0,
         recent: playedValues.slice(-3),
       };
     })
-    .sort((a, b) => b.winnings - a.winnings || b.winRate - a.winRate || b.played - a.played);
+    .sort((a, b) => b.net - a.net || b.winRate - a.winRate || b.played - a.played);
 
   const selectedDateIndex = historyDates.indexOf(selectedDate);
 
   return (
     <div>
-      <PageHeading eyebrow={`historical ranking · ${historyDates.length} games`} title="지금까지의\n랭킹" description="전적 파일을 기준으로 누적상금, 승률, 최근 3경기를 집계했어요. 빈칸은 미참여, 0은 패배로 계산했습니다." />
+      <PageHeading eyebrow={`historical ranking · ${historyDates.length} games`} title="지금까지의\n랭킹" description="전적 파일의 전체 합계를 NET으로 계산했어요. 금액은 만원 단위이며, 빈칸은 미참여·0은 패배입니다." />
       <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
-        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><div><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">standings</span><p className="mt-1 text-xs text-[#858a9b]">누적상금 양수 합계 · 순위별 티어</p></div><Trophy size={18} className="text-[#b38b1e]" /></div>
-        <div className="divide-y divide-[#ececf0]">
+        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><div><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">standings</span><p className="mt-1 text-xs text-[#858a9b]">NET 누적상금 · 만원 단위</p></div><Trophy size={18} className="text-[#b38b1e]" /></div>
+        <div className="overflow-x-auto">
+        <div className="min-w-[650px] divide-y divide-[#ececf0]">
           {rankedPlayers.map((stat, index) => {
             const rank = index + 1;
             const tier = rankingTier(rank, rankedPlayers.length);
-            return <div className="p-4" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
-              <div className="flex items-start gap-3">
+            return <div className="p-3" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
+              <div className="grid grid-cols-[32px_180px_120px_86px_1fr] items-center gap-3 whitespace-nowrap">
                 <span className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rank === 1 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>{String(rank).padStart(2, '0')}</span>
-                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${stat.player.color} ${stat.player.text}`}>{stat.player.name.slice(0, 1)}</div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${tier.className}`}>{tier.label}</span></div>
-                  <p className="mt-1 text-xs text-[#858a9b]">총 {stat.played}경기 · {stat.wins}승 {stat.losses}패</p>
-                </div>
-                <div className="text-right"><p className="mono text-lg font-bold tracking-[-0.08em] text-[#20253a]">+{stat.winnings.toLocaleString()}</p><p className="text-[10px] text-[#858a9b]">누적상금</p></div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-[#fafaf6] px-3 py-2.5 text-xs">
-                <div><p className="text-[#858a9b]">승률</p><p className="mono mt-1 font-bold text-[#20253a]">{Math.round(stat.winRate * 100)}%</p></div>
-                <div><p className="text-[#858a9b]">최근 3경기</p><div className="mt-1 flex gap-1.5">{stat.recent.length ? stat.recent.map((value, recentIndex) => <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'}</span>) : <span className="text-[#a0a4b1]">기록 없음</span>}</div></div>
+                <div className="flex items-center gap-2"><div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${stat.player.color} ${stat.player.text}`}>{stat.player.name.slice(0, 1)}</div><p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${tier.className}`}>{tier.label}</span></div>
+                <div><p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p><p className="text-[10px] text-[#858a9b]">NET 누적상금</p></div>
+                <div><p className="mono text-sm font-bold text-[#20253a]">{Math.round(stat.winRate * 100)}%</p><p className="text-[10px] text-[#858a9b]">{stat.wins}승 {stat.losses}패</p></div>
+                <div className="flex items-center gap-1.5"><span className="mr-1 text-[10px] text-[#858a9b]">최근 3경기</span>{stat.recent.length ? stat.recent.map((value, recentIndex) => <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'}</span>) : <span className="text-[10px] text-[#a0a4b1]">기록 없음</span>}</div>
               </div>
             </div>;
           })}
+        </div>
         </div>
       </section>
 
