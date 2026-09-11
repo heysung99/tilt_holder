@@ -703,15 +703,16 @@ function rankingTier(rank: number, total: number) {
   if (percentile <= 0.05) return { label: '챌린저', className: 'bg-[#eee4b8] text-[#8d6b15]' };
   if (percentile <= 0.15) return { label: '그랜드마스터', className: 'bg-[#ffe0d7] text-[#a44c3e]' };
   if (percentile <= 0.3) return { label: '마스터', className: 'bg-[#e7defb] text-[#67429a]' };
-  if (percentile <= 0.5) return { label: '다이아', className: 'bg-[#dce6ff] text-[#334b98]' };
-  if (percentile <= 0.7) return { label: '플래티넘', className: 'bg-[#d9f0ea] text-[#28715d]' };
-  if (percentile <= 0.85) return { label: '골드', className: 'bg-[#f8e3bb] text-[#9b6a1d]' };
-  return { label: '실버', className: 'bg-[#f1f1ee] text-[#697087]' };
+  if (percentile <= 0.45) return { label: '다이아', className: 'bg-[#dce6ff] text-[#334b98]' };
+  if (percentile <= 0.6) return { label: '플래티넘', className: 'bg-[#d9f0ea] text-[#28715d]' };
+  if (percentile <= 0.75) return { label: '골드', className: 'bg-[#f8e3bb] text-[#9b6a1d]' };
+  if (percentile <= 0.9) return { label: '실버', className: 'bg-[#f1f1ee] text-[#697087]' };
+  return { label: '브론즈', className: 'bg-[#ead7ca] text-[#85563d]' };
 }
 
 function RankingScreen({ users }: { users: Player[] }) {
   const [selectedDate, setSelectedDate] = useState(historyDates[historyDates.length - 1] ?? '');
-  const rankedPlayers = users
+  const allPlayers = users
     .map((player) => {
       const record = historicalRecords.find((item) => item.name === player.name);
       const values = record?.values ?? [];
@@ -725,10 +726,12 @@ function RankingScreen({ users }: { users: Player[] }) {
         losses: playedValues.length - wins,
         net,
         winRate: playedValues.length ? wins / playedValues.length : 0,
-        recent: playedValues.slice(-3),
+        recent: [null, null, ...playedValues.slice(-3)].slice(-3),
       };
     })
     .sort((a, b) => b.net - a.net || b.winRate - a.winRate || b.played - a.played);
+  const rankedPlayers = allPlayers.filter((stat) => stat.played >= 5);
+  const unrankedPlayers = allPlayers.filter((stat) => stat.played < 5);
 
   const selectedDateIndex = historyDates.indexOf(selectedDate);
 
@@ -736,7 +739,7 @@ function RankingScreen({ users }: { users: Player[] }) {
     <div>
       <PageHeading eyebrow={`historical ranking · ${historyDates.length} games`} title="지금까지의\n랭킹" description="전적 파일의 전체 합계를 NET으로 계산했어요. 금액은 만원 단위이며, 빈칸은 미참여·0은 패배입니다." />
       <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
-        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><div><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">standings</span><p className="mt-1 text-xs text-[#858a9b]">NET 누적상금 · 만원 단위</p></div><Trophy size={18} className="text-[#b38b1e]" /></div>
+        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><div><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">ranked · {rankedPlayers.length} players</span><p className="mt-1 text-xs text-[#858a9b]">5회 이상 참여자 · NET 누적상금 · 만원 단위</p></div><Trophy size={18} className="text-[#b38b1e]" /></div>
         <div className="overflow-x-auto">
         <div className="min-w-[650px] divide-y divide-[#ececf0]">
           {rankedPlayers.map((stat, index) => {
@@ -748,11 +751,30 @@ function RankingScreen({ users }: { users: Player[] }) {
                 <div className="flex items-center gap-2"><div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${stat.player.color} ${stat.player.text}`}>{stat.player.name.slice(0, 1)}</div><p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${tier.className}`}>{tier.label}</span></div>
                 <div><p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p><p className="text-[10px] text-[#858a9b]">NET 누적상금</p></div>
                 <div><p className="mono text-sm font-bold text-[#20253a]">{Math.round(stat.winRate * 100)}%</p><p className="text-[10px] text-[#858a9b]">{stat.wins}승 {stat.losses}패</p></div>
-                <div className="flex items-center gap-1.5"><span className="mr-1 text-[10px] text-[#858a9b]">최근 3경기</span>{stat.recent.length ? stat.recent.map((value, recentIndex) => <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'}</span>) : <span className="text-[10px] text-[#a0a4b1]">기록 없음</span>}</div>
+                <div className="flex items-center gap-1.5"><span className="mr-1 text-[10px] text-[#858a9b]">최근 3경기</span>{stat.recent.map((value, recentIndex) => value === null ? <span key={`${stat.player.name}-${recentIndex}`} className="rounded-md bg-[#f1f1ee] px-1.5 py-0.5 text-[10px] font-bold text-[#a0a4b1]">—</span> : <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'}</span>)}</div>
               </div>
             </div>;
           })}
         </div>
+        </div>
+      </section>
+
+      <section className="rise-in delay-2 mt-6 tilt-card overflow-hidden" data-testid="card-unranked-list">
+        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><div><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">unranked · {unrankedPlayers.length} players</span><p className="mt-1 text-xs text-[#858a9b]">5회 미만 참여자 · 참여 5회부터 정식 랭킹</p></div><span className="rounded-full bg-[#f1f1ee] px-2 py-1 text-[10px] font-bold text-[#697087]">언랭</span></div>
+        <div className="overflow-x-auto">
+          <div className="min-w-[650px] divide-y divide-[#ececf0]">
+            {unrankedPlayers.map((stat, index) => (
+              <div className="p-3" key={stat.player.name} data-testid={`row-unranked-${stat.player.name}`}>
+                <div className="grid grid-cols-[32px_180px_120px_86px_1fr] items-center gap-3 whitespace-nowrap">
+                  <span className="mono flex h-7 w-7 items-center justify-center rounded-full bg-[#f1f1ee] text-xs font-bold text-[#858a9b]">{String(index + 1).padStart(2, '0')}</span>
+                  <div className="flex items-center gap-2"><div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${stat.player.color} ${stat.player.text}`}>{stat.player.name.slice(0, 1)}</div><p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p><span className="rounded-full bg-[#f1f1ee] px-2 py-1 text-[10px] font-bold text-[#697087]">언랭</span></div>
+                  <div><p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p><p className="text-[10px] text-[#858a9b]">NET 누적상금</p></div>
+                  <div><p className="mono text-sm font-bold text-[#20253a]">{Math.round(stat.winRate * 100)}%</p><p className="text-[10px] text-[#858a9b]">{stat.wins}승 {stat.losses}패 · {stat.played}회</p></div>
+                  <div className="flex items-center gap-1.5"><span className="mr-1 text-[10px] text-[#858a9b]">최근 3경기</span>{stat.recent.map((value, recentIndex) => value === null ? <span key={`${stat.player.name}-${recentIndex}`} className="rounded-md bg-[#f1f1ee] px-1.5 py-0.5 text-[10px] font-bold text-[#a0a4b1]">—</span> : <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'}</span>)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
