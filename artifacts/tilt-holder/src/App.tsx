@@ -27,6 +27,7 @@ import {
   Users,
   WalletCards,
 } from 'lucide-react';
+import { historyDates, historicalRecords } from '@/data/history';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 
@@ -84,7 +85,7 @@ const navItems: Array<{ key: TabKey; label: string; path: string; icon: typeof G
   { key: 'fund', label: '공금', path: '/fund', icon: WalletCards },
 ];
 
-const userNames = '김형석 황성욱 채민수 최종탁 한용규 염동엽 유진한 임근혁 김준형 하동선 이순용 김정현 성민 박경동 우제승 김우준 서지훈 고찬규 지도협 이민욱 영빈 심준성 이경배 이영훈 차재훈 곽성규 성친 안석진'.split(' ');
+const userNames = historicalRecords.map((record) => record.name);
 const avatarStyles = [
   ['bg-[#dce6ff]', 'text-[#334b98]'],
   ['bg-[#ffe0d7]', 'text-[#a44c3e]'],
@@ -96,7 +97,7 @@ const avatarStyles = [
 
 const initialPlayers: Player[] = userNames.map((name, index) => ({
   name,
-  score: Math.max(0, 12 - index),
+  score: 0,
   color: avatarStyles[index % avatarStyles.length][0],
   text: avatarStyles[index % avatarStyles.length][1],
 }));
@@ -735,27 +736,88 @@ function SettleScreen({
   );
 }
 
+function rankingTier(rank: number, total: number) {
+  const percentile = total === 0 ? 1 : rank / total;
+  if (percentile <= 0.05) return { label: '챌린저', className: 'bg-[#eee4b8] text-[#8d6b15]' };
+  if (percentile <= 0.15) return { label: '그랜드마스터', className: 'bg-[#ffe0d7] text-[#a44c3e]' };
+  if (percentile <= 0.3) return { label: '마스터', className: 'bg-[#e7defb] text-[#67429a]' };
+  if (percentile <= 0.5) return { label: '다이아', className: 'bg-[#dce6ff] text-[#334b98]' };
+  if (percentile <= 0.7) return { label: '플래티넘', className: 'bg-[#d9f0ea] text-[#28715d]' };
+  if (percentile <= 0.85) return { label: '골드', className: 'bg-[#f8e3bb] text-[#9b6a1d]' };
+  return { label: '실버', className: 'bg-[#f1f1ee] text-[#697087]' };
+}
+
 function RankingScreen({ users }: { users: Player[] }) {
+  const [selectedDate, setSelectedDate] = useState(historyDates[historyDates.length - 1] ?? '');
+  const rankedPlayers = users
+    .map((player) => {
+      const record = historicalRecords.find((item) => item.name === player.name);
+      const values = record?.values ?? [];
+      const playedValues = values.filter((value): value is number => value !== null);
+      const wins = playedValues.filter((value) => value > 0).length;
+      const winnings = playedValues.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
+      return {
+        player,
+        played: playedValues.length,
+        wins,
+        losses: playedValues.length - wins,
+        winnings,
+        winRate: playedValues.length ? wins / playedValues.length : 0,
+        recent: playedValues.slice(-3),
+      };
+    })
+    .sort((a, b) => b.winnings - a.winnings || b.winRate - a.winRate || b.played - a.played);
+
+  const selectedDateIndex = historyDates.indexOf(selectedDate);
+
   return (
     <div>
-      <PageHeading eyebrow="season score · 4 games" title="오늘의 플레이어는\n누구였을까요?" description="이번 모임에서 쌓인 승점을 기준으로 정리했어요. 다음 판의 작은 긴장감을 위해." />
+      <PageHeading eyebrow={`historical ranking · ${historyDates.length} games`} title="지금까지의\n랭킹" description="전적 파일을 기준으로 누적상금, 승률, 최근 3경기를 집계했어요. 빈칸은 미참여, 0은 패배로 계산했습니다." />
       <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
-        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">standings</span><span className="text-xs text-[#858a9b]">승점 기준</span></div>
+        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><div><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">standings</span><p className="mt-1 text-xs text-[#858a9b]">누적상금 양수 합계 · 순위별 티어</p></div><Trophy size={18} className="text-[#b38b1e]" /></div>
         <div className="divide-y divide-[#ececf0]">
-          {users.slice(0, 10).map((player, index) => <div className="flex items-center gap-4 px-5 py-4" key={player.name} data-testid={`row-ranking-${player.name}`}>
-            <span className={`mono flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${index === 0 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>{String(index + 1).padStart(2, '0')}</span>
-            <div className={`flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold ${player.color} ${player.text}`}>{player.name.slice(0, 1)}</div>
-            <div className="flex-1"><p className="text-sm font-bold text-[#20253a]">{player.name}{index === 0 ? <span className="ml-2 rounded-full bg-[#eef0ff] px-2 py-1 text-[10px] text-[#2d3d8f]">리더</span> : null}</p><p className="mt-1 text-xs text-[#858a9b]">{index === 0 ? '최근 2게임 연속 1위' : `${index + 1}게임 참여`}</p></div>
-            <p className="mono text-lg font-bold tracking-[-0.08em] text-[#20253a]">{player.score}<span className="ml-1 text-[11px] font-normal tracking-normal text-[#858a9b]">점</span></p>
-          </div>)}
+          {rankedPlayers.map((stat, index) => {
+            const rank = index + 1;
+            const tier = rankingTier(rank, rankedPlayers.length);
+            return <div className="p-4" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
+              <div className="flex items-start gap-3">
+                <span className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rank === 1 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>{String(rank).padStart(2, '0')}</span>
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${stat.player.color} ${stat.player.text}`}>{stat.player.name.slice(0, 1)}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2"><p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${tier.className}`}>{tier.label}</span></div>
+                  <p className="mt-1 text-xs text-[#858a9b]">총 {stat.played}경기 · {stat.wins}승 {stat.losses}패</p>
+                </div>
+                <div className="text-right"><p className="mono text-lg font-bold tracking-[-0.08em] text-[#20253a]">+{stat.winnings.toLocaleString()}</p><p className="text-[10px] text-[#858a9b]">누적상금</p></div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-[#fafaf6] px-3 py-2.5 text-xs">
+                <div><p className="text-[#858a9b]">승률</p><p className="mono mt-1 font-bold text-[#20253a]">{Math.round(stat.winRate * 100)}%</p></div>
+                <div><p className="text-[#858a9b]">최근 3경기</p><div className="mt-1 flex gap-1.5">{stat.recent.length ? stat.recent.map((value, recentIndex) => <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'}</span>) : <span className="text-[#a0a4b1]">기록 없음</span>}</div></div>
+              </div>
+            </div>;
+          })}
         </div>
       </section>
-      <section className="rise-in delay-2 mt-6 grid grid-cols-[1fr_auto] gap-4 rounded-[20px] bg-[#2d3d8f] p-5 text-[#f7f7ed]" data-testid="card-rank-highlight">
-        <div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#cbd1f2]">next target</p><p className="mt-2 text-lg font-bold tracking-[-0.04em]">서연님, 2점만 더!</p><p className="mt-1 text-xs text-[#d7dbf1]">민준님을 따라잡을 수 있어요.</p></div>
-        <div className="flex h-14 w-14 items-center justify-center rounded-full border-4 border-[#e9ef76] text-center"><span className="mono text-sm font-bold">2<span className="block text-[8px] font-normal">점차</span></span></div>
+
+      <section className="rise-in delay-2 mt-6" data-testid="section-date-results">
+        <div className="mb-3 flex items-end justify-between"><div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">date results</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">날짜별 결과</h3></div><span className="text-xs text-[#858a9b]">총 {historyDates.length}회</span></div>
+        <label className="sr-only" htmlFor="ranking-date-select">전적 날짜 선택</label>
+        <select id="ranking-date-select" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm font-bold text-[#20253a] outline-none focus:border-[#2d3d8f]" data-testid="select-ranking-date">
+          {historyDates.slice().reverse().map((date) => <option key={date} value={date}>{date}</option>)}
+        </select>
+        <div className="tilt-card mt-3 divide-y divide-[#ececf0]">
+          {users.map((player) => {
+            const record = historicalRecords.find((item) => item.name === player.name);
+            const value = selectedDateIndex >= 0 ? record?.values[selectedDateIndex] ?? null : null;
+            return <div key={player.name} className="flex items-center gap-3 px-4 py-3" data-testid={`row-date-result-${player.name}`}>
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${player.color} ${player.text}`}>{player.name.slice(0, 1)}</div>
+              <span className="flex-1 text-sm font-semibold text-[#20253a]">{player.name}</span>
+              {value === null ? <span className="rounded-full bg-[#f1f1ee] px-2 py-1 text-[10px] font-bold text-[#9ba0ae]">미참여</span> : <span className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'} <span className="mono">{value > 0 ? '+' : ''}{value}</span></span>}
+            </div>;
+          })}
+        </div>
       </section>
-      <button type="button" className="tilt-button mt-6 flex w-full items-center justify-between rounded-[16px] border border-dashed border-[#d8d9df] px-4 py-3 text-left hover:bg-[#f8f8f4]" data-testid="button-reset-ranking" onClick={() => window.alert('이번 시즌 기록은 계속 보관돼요.')}>
-        <span className="flex items-center gap-2 text-xs font-semibold text-[#697087]"><RotateCcw size={15} /> 시즌 기록 안내</span><ChevronRight size={15} className="text-[#a0a4b1]" />
+      <button type="button" className="tilt-button mt-6 flex w-full items-center justify-between rounded-[16px] border border-dashed border-[#d8d9df] px-4 py-3 text-left hover:bg-[#f8f8f4]" data-testid="button-ranking-rule" onClick={() => window.alert('빈칸은 미참여, 0을 포함한 음수는 패배로 계산했어요.')}>
+        <span className="flex items-center gap-2 text-xs font-semibold text-[#697087]"><RotateCcw size={15} /> 전적 계산 기준</span><ChevronRight size={15} className="text-[#a0a4b1]" />
       </button>
     </div>
   );
