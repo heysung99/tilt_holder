@@ -140,23 +140,16 @@ const initialSession: SessionState = {
   fundApplied: false,
 };
 
-const initialExpenses: ExpenseEntry[] = [
-  { id: 'snack', title: '편의점 간식', payer: '민준', amount: 18400, time: '18:42' },
-  { id: 'rent', title: '보드게임 대여', payer: '서연', amount: 12000, time: '18:16' },
-];
+const initialExpenses: ExpenseEntry[] = [];
 
-const initialFundEntries: FundEntry[] = [
-  { id: 'opening', title: '이전 모임 잔액', meta: '시작 잔액', amount: 50000 },
-  { id: 'rent', title: '보드게임 대여', meta: '서연 · 04.17', amount: -12000 },
-  { id: 'snack', title: '편의점 간식', meta: '민준 · 04.19', amount: -18400 },
-];
+const initialFundEntries: FundEntry[] = [];
 
 function AppShell() {
   const [activeTab, setActiveTab] = useState<TabKey>('game');
   const [users, setUsers] = useState<Player[]>(() => readStored('tilt-holder-users-v3', initialPlayers));
   const [session, setSession] = useState<SessionState>(() => readStored('tilt-holder-session-v2', initialSession));
-  const [expenses, setExpenses] = useState<ExpenseEntry[]>(() => readStored('tilt-holder-expenses-v2', initialExpenses));
-  const [fundEntries, setFundEntries] = useState<FundEntry[]>(() => readStored('tilt-holder-fund-entries-v2', initialFundEntries));
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>(() => readStored('tilt-holder-expenses-v3', initialExpenses));
+  const [fundEntries, setFundEntries] = useState<FundEntry[]>(() => readStored('tilt-holder-fund-entries-v3', initialFundEntries));
 
   useEffect(() => {
     window.localStorage.setItem('tilt-holder-users-v3', JSON.stringify(users));
@@ -167,11 +160,11 @@ function AppShell() {
   }, [session]);
 
   useEffect(() => {
-    window.localStorage.setItem('tilt-holder-expenses-v2', JSON.stringify(expenses));
+    window.localStorage.setItem('tilt-holder-expenses-v3', JSON.stringify(expenses));
   }, [expenses]);
 
   useEffect(() => {
-    window.localStorage.setItem('tilt-holder-fund-entries-v2', JSON.stringify(fundEntries));
+    window.localStorage.setItem('tilt-holder-fund-entries-v3', JSON.stringify(fundEntries));
   }, [fundEntries]);
 
   const participantDetails = users.filter((player) => session.participantNames.includes(player.name));
@@ -311,7 +304,7 @@ function AppShell() {
 
   return (
     <div className="tilt-shell">
-      <main className="tilt-container page-enter pb-32 pt-6 sm:pt-9">
+      <main className="tilt-container page-enter pb-40 pt-6 sm:pt-9">
         <header className="mb-8">
           <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
         </header>
@@ -356,12 +349,12 @@ function AppShell() {
   );
 }
 
-function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
+function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: string; description?: string }) {
   return (
     <div className="rise-in mb-7">
       <p className="mono mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#697087]">{eyebrow}</p>
       <h2 className="text-[30px] font-bold leading-[1.08] tracking-[-0.06em] text-[#20253a]">{title}</h2>
-      <p className="mt-3 max-w-[440px] text-[14px] leading-6 text-[#697087]">{description}</p>
+      {description ? <p className="mt-3 max-w-[440px] text-[14px] leading-6 text-[#697087]">{description}</p> : null}
     </div>
   );
 }
@@ -401,7 +394,7 @@ function GameScreen({
       <PageHeading
         eyebrow={`게임 세션 · ${formatSessionDate(session.date)}`}
         title={isPlaying ? '좋아, 다음 라운드.' : '한 판 더,\n가볍게 시작해요.'}
-        description={isPlaying ? '기록은 TILT HOLDER가 맡을게요. 플레이에만 집중하세요.' : '게임 날짜와 참가자를 고르면 바이인 기록을 바로 시작할 수 있어요.'}
+        description={undefined}
       />
 
       <section className="rise-in delay-1 tilt-card overflow-hidden bg-[#2d3d8f] text-[#f7f7ed]" data-testid="card-current-game">
@@ -438,7 +431,7 @@ function GameScreen({
             data-testid="button-start-round"
             onClick={() => setIsPlaying((current) => !current)}
           >
-            {isPlaying ? '라운드 종료' : '라운드 시작'}
+            <span className="sr-only">{isPlaying ? '라운드 종료' : '라운드 시작'}</span>
             <ArrowUpRight size={14} />
           </button>
         </div>
@@ -493,6 +486,10 @@ function GameScreen({
   );
 }
 
+function historicalParticipationCount(name: PlayerName) {
+  return historicalRecords.find((record) => record.name === name)?.values.filter((value) => value !== null).length ?? 0;
+}
+
 function NewSessionForm({
   users,
   currentSession,
@@ -514,6 +511,9 @@ function NewSessionForm({
   const [newUserName, setNewUserName] = useState('');
   const [editingName, setEditingName] = useState<PlayerName | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const orderedUsers = users
+    .map((player, index) => ({ player, index, participationCount: historicalParticipationCount(player.name) }))
+    .sort((a, b) => b.participationCount - a.participationCount || a.index - b.index);
 
   const toggleParticipant = (name: PlayerName) => {
     setParticipantNames((current) => {
@@ -549,10 +549,10 @@ function NewSessionForm({
       <fieldset className="mt-4">
         <legend className="flex items-center gap-1.5 text-xs font-semibold text-[#596078]"><Crown size={13} className="text-[#2d3d8f]" /> 참가자 선택 · 역할 지정</legend>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          {users.map((player) => {
+          {orderedUsers.map(({ player, participationCount }) => {
             const selected = participantNames.includes(player.name);
             return <div key={player.name} className={`rounded-xl border p-2 ${selected ? 'border-[#bfc7f0] bg-[#eef0ff]' : 'border-[#e4e5ea] bg-white'}`}>
-              <button type="button" className={`tilt-button flex w-full items-center gap-2 text-left text-sm font-semibold ${selected ? 'text-[#2d3d8f]' : 'text-[#858a9b]'}`} data-testid={`button-select-participant-${player.name}`} onClick={() => toggleParticipant(player.name)}><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${player.color} ${player.text}`}>{selected ? <Check size={14} /> : player.name.slice(0, 1)}</span><span className="min-w-0 flex-1 truncate">{player.name}</span></button>
+              <button type="button" className={`tilt-button flex w-full items-center gap-2 text-left text-sm font-semibold ${selected ? 'text-[#2d3d8f]' : 'text-[#858a9b]'}`} data-testid={`button-select-participant-${player.name}`} onClick={() => toggleParticipant(player.name)}><span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${player.color} ${player.text}`}>{selected ? <Check size={14} /> : player.name.slice(0, 1)}</span><span className="min-w-0 flex-1 truncate">{player.name}</span><span className="mono text-[9px] font-normal text-[#a0a4b1]">{participationCount}회</span></button>
               <div className="mt-2 flex items-center justify-between gap-1 border-t border-[#ececf0] pt-2 text-[9px] font-bold tracking-wide">
                 <label className={`flex items-center gap-1 ${selected ? 'text-[#2d3d8f]' : 'text-[#b1b4bf]'}`}><input type="radio" name="host-player" checked={hostName === player.name} disabled={!selected} onChange={() => setHostName(player.name)} /> HOST</label>
                 <label className={`flex items-center gap-1 ${selected ? 'text-[#bd604d]' : 'text-[#b1b4bf]'}`}><input type="radio" name="bank-player" checked={bankName === player.name} disabled={!selected} onChange={() => setBankName(player.name)} /> BANK</label>
@@ -699,15 +699,20 @@ function SettleScreen({
 }
 
 function rankingTier(rank: number, total: number) {
-  const percentile = total === 0 ? 1 : rank / total;
-  if (percentile <= 0.05) return { label: '챌린저', className: 'bg-[#eee4b8] text-[#8d6b15]' };
-  if (percentile <= 0.15) return { label: '그랜드마스터', className: 'bg-[#ffe0d7] text-[#a44c3e]' };
-  if (percentile <= 0.3) return { label: '마스터', className: 'bg-[#e7defb] text-[#67429a]' };
-  if (percentile <= 0.45) return { label: '다이아', className: 'bg-[#dce6ff] text-[#334b98]' };
-  if (percentile <= 0.6) return { label: '플래티넘', className: 'bg-[#d9f0ea] text-[#28715d]' };
-  if (percentile <= 0.75) return { label: '골드', className: 'bg-[#f8e3bb] text-[#9b6a1d]' };
-  if (percentile <= 0.9) return { label: '실버', className: 'bg-[#f1f1ee] text-[#697087]' };
-  return { label: '브론즈', className: 'bg-[#ead7ca] text-[#85563d]' };
+  if (rank === 1) return { label: '챌린저', className: 'bg-[#eee4b8] text-[#8d6b15]' };
+  if (rank === 2) return { label: '그랜드마스터', className: 'bg-[#ffe0d7] text-[#a44c3e]' };
+  if (rank === 3) return { label: '마스터', className: 'bg-[#e7defb] text-[#67429a]' };
+  const otherRank = rank - 4;
+  const otherCount = Math.max(total - 3, 1);
+  const tierIndex = Math.min(4, Math.floor((otherRank * 5) / otherCount));
+  const tiers = [
+    { label: '다이아', className: 'bg-[#dce6ff] text-[#334b98]' },
+    { label: '플래티넘', className: 'bg-[#d9f0ea] text-[#28715d]' },
+    { label: '골드', className: 'bg-[#f8e3bb] text-[#9b6a1d]' },
+    { label: '실버', className: 'bg-[#f1f1ee] text-[#697087]' },
+    { label: '브론즈', className: 'bg-[#ead7ca] text-[#85563d]' },
+  ];
+  return tiers[tierIndex];
 }
 
 function RankingScreen({ users }: { users: Player[] }) {
@@ -737,7 +742,7 @@ function RankingScreen({ users }: { users: Player[] }) {
 
   return (
     <div>
-      <PageHeading eyebrow={`historical ranking · ${historyDates.length} games`} title="지금까지의\n랭킹" description="전적 파일의 전체 합계를 NET으로 계산했어요. 금액은 만원 단위이며, 빈칸은 미참여·0은 패배입니다." />
+      <PageHeading eyebrow={`historical ranking · ${historyDates.length} games`} title="지금까지의\n랭킹" />
       <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
         <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><div><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">ranked · {rankedPlayers.length} players</span><p className="mt-1 text-xs text-[#858a9b]">5회 이상 참여자 · NET 누적상금 · 만원 단위</p></div><Trophy size={18} className="text-[#b38b1e]" /></div>
         <div className="overflow-x-auto">
@@ -785,13 +790,17 @@ function RankingScreen({ users }: { users: Player[] }) {
           {historyDates.slice().reverse().map((date) => <option key={date} value={date}>{date}</option>)}
         </select>
         <div className="tilt-card mt-3 divide-y divide-[#ececf0]">
-          {users.map((player) => {
+          {users.filter((player) => {
+            const record = historicalRecords.find((item) => item.name === player.name);
+            const value = selectedDateIndex >= 0 ? record?.values[selectedDateIndex] ?? null : null;
+            return value !== null;
+          }).map((player) => {
             const record = historicalRecords.find((item) => item.name === player.name);
             const value = selectedDateIndex >= 0 ? record?.values[selectedDateIndex] ?? null : null;
             return <div key={player.name} className="flex items-center gap-3 px-4 py-3" data-testid={`row-date-result-${player.name}`}>
               <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${player.color} ${player.text}`}>{player.name.slice(0, 1)}</div>
               <span className="flex-1 text-sm font-semibold text-[#20253a]">{player.name}</span>
-              {value === null ? <span className="rounded-full bg-[#f1f1ee] px-2 py-1 text-[10px] font-bold text-[#9ba0ae]">미참여</span> : <span className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'} <span className="mono">{value > 0 ? '+' : ''}{value}</span></span>}
+              {value !== null ? <span className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'} <span className="mono">{value > 0 ? '+' : ''}{value}</span></span> : null}
             </div>;
           })}
         </div>
