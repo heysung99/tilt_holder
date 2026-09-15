@@ -304,7 +304,7 @@ function AppShell() {
 
   return (
     <div className="tilt-shell">
-      <main className="tilt-container page-enter pb-60 pt-6 sm:pt-9">
+      <main className="tilt-container page-enter pb-[480px] pt-6 sm:pt-9">
         <header className="mb-8">
           <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
         </header>
@@ -343,6 +343,7 @@ function AppShell() {
             onAddDeposit={addFundDeposit}
           />
         )}
+        <div className="h-64" />
       </main>
       <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
