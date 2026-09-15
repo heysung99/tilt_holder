@@ -201,7 +201,7 @@ function AppShell() {
       ...current,
       buyIns: {
         ...current.buyIns,
-        [name]: Math.max(0, (current.buyIns[name] ?? 0) + delta),
+        [name]: (current.buyIns[name] ?? 0) + delta,
       },
     }));
   };
@@ -304,7 +304,7 @@ function AppShell() {
 
   return (
     <div className="tilt-shell">
-      <main className="tilt-container page-enter pb-40 pt-6 sm:pt-9">
+      <main className="tilt-container page-enter pb-60 pt-6 sm:pt-9">
         <header className="mb-8">
           <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
         </header>
@@ -374,7 +374,6 @@ function GameScreen({
   onAddUser: (name: string) => boolean;
   onRenameUser: (currentName: PlayerName, nextName: string) => boolean;
 }) {
-  const [isPlaying, setIsPlaying] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showNewGame, setShowNewGame] = useState(false);
 
@@ -389,53 +388,7 @@ function GameScreen({
         <span><span className="mono block text-[10px] font-bold uppercase tracking-[0.16em] text-[#cbd1f2]">new game</span><span className="mt-1 block text-lg font-bold">게임 개설</span></span>
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e9ef76] text-[#2d3d8f]"><CirclePlus size={20} /></span>
       </button>
-      {showNewGame ? <NewSessionForm users={users} currentSession={session} onCreate={(draft) => { onCreateSession(draft); setShowNewGame(false); setIsPlaying(false); }} onAddUser={onAddUser} onRenameUser={onRenameUser} /> : null}
-
-      <PageHeading
-        eyebrow={`게임 세션 · ${formatSessionDate(session.date)}`}
-        title={isPlaying ? '좋아, 다음 라운드.' : '한 판 더,\n가볍게 시작해요.'}
-        description={undefined}
-      />
-
-      <section className="rise-in delay-1 tilt-card overflow-hidden bg-[#2d3d8f] text-[#f7f7ed]" data-testid="card-current-game">
-        <div className="flex items-start justify-between p-5 pb-4 sm:p-7 sm:pb-5">
-          <div>
-            <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#cbd1f2]">now playing</p>
-            <h3 className="mt-2 text-[23px] font-bold tracking-[-0.05em]">{session.gameName}</h3>
-          </div>
-          <span className="rounded-full bg-[#e9ef76] px-3 py-1.5 text-[11px] font-bold text-[#2d3d8f]">{session.participantNames.length}명 참여</span>
-        </div>
-        <div className="mx-5 grid grid-cols-4 gap-2 border-t border-white/15 py-5 sm:mx-7">
-          {users.filter((player) => session.participantNames.includes(player.name)).map((player) => (
-            <div key={player.name} className="text-center">
-              <div className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ${player.color} ${player.text}`}>
-                {player.name.slice(0, 1)}
-              </div>
-              <p className="mt-2 text-[11px] text-[#d7dbf1]">{player.name}</p>
-              <p className="mono mt-1 text-[14px] font-bold">{session.buyIns[player.name] ?? 0}<span className="ml-1 text-[10px] font-normal text-[#cbd1f2]">회</span></p>
-              <div className="mt-1 flex justify-center gap-1 text-[8px] font-bold uppercase tracking-wide text-[#cbd1f2]">
-                {session.hostName === player.name ? <span>HOST</span> : null}
-                {session.bankName === player.name ? <span>BANK</span> : null}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center justify-between bg-[#263675] px-5 py-4 sm:px-7">
-          <div className="flex items-center gap-2 text-xs text-[#d7dbf1]">
-            <Clock3 size={14} />
-            <span>{isPlaying ? '진행 중 · 바이인 기록 중' : session.isFinished ? '게임 종료 · 정산 가능' : '시작 전 · 바이인 준비'}</span>
-          </div>
-          <button
-            type="button"
-            className="tilt-button flex items-center gap-1 rounded-full bg-[#e9ef76] px-3.5 py-2 text-xs font-bold text-[#2d3d8f] hover:bg-[#f2f5a5]"
-            data-testid="button-start-round"
-            onClick={() => setIsPlaying((current) => !current)}
-          >
-            <span className="sr-only">{isPlaying ? '라운드 종료' : '라운드 시작'}</span>
-            <ArrowUpRight size={14} />
-          </button>
-        </div>
-      </section>
+      {showNewGame ? <NewSessionForm users={users} currentSession={session} onCreate={(draft) => { onCreateSession(draft); setShowNewGame(false); }} onAddUser={onAddUser} onRenameUser={onRenameUser} /> : null}
 
       <section className="rise-in delay-2 mt-6 rounded-[18px] border border-[#d9dcf1] bg-[#f3f4ff] p-4" data-testid="panel-buy-in-controls">
         <div className="mb-3 flex items-center justify-between">
@@ -627,7 +580,6 @@ function SettleScreen({
 
   return (
     <div>
-      <PageHeading eyebrow="round expenses" title="정산은 여기서\n한 번에 끝내요." description="누가 먼저 냈는지만 적어두면, 각자 보낼 금액을 깔끔하게 정리해드려요." />
       <section className="rise-in delay-1 tilt-card bg-[#e9ef76] p-5 sm:p-7" data-testid="card-settlement-summary">
         <div className="flex items-end justify-between">
           <div><p className="text-sm font-semibold text-[#596313]">플러스 플레이어 지급액</p><p className="mono mt-2 text-[28px] font-bold tracking-[-0.08em] text-[#20253a]">{formatWon(totalPayout)}</p></div>
@@ -699,89 +651,242 @@ function SettleScreen({
 }
 
 function rankingTier(rank: number, total: number) {
-  if (rank === 1) return { label: '챌린저', className: 'bg-[#eee4b8] text-[#8d6b15]' };
-  if (rank === 2) return { label: '그랜드마스터', className: 'bg-[#ffe0d7] text-[#a44c3e]' };
-  if (rank === 3) return { label: '마스터', className: 'bg-[#e7defb] text-[#67429a]' };
+  if (rank === 1) return { label: '챌린저', icon: '👑', className: 'bg-gradient-to-r from-[#ffe17d] to-[#ffd000] text-[#523d00] border border-[#e6b800] shadow-xs font-extrabold' };
+  if (rank === 2) return { label: '그랜드마스터', icon: '🔥', className: 'bg-gradient-to-r from-[#ff8d82] to-[#e63928] text-white border border-[#b82314] shadow-xs font-extrabold' };
+  if (rank === 3) return { label: '마스터', icon: '🔮', className: 'bg-gradient-to-r from-[#d8b4fe] to-[#9333ea] text-white border border-[#7e22ce] shadow-xs font-bold' };
   const otherRank = rank - 4;
   const otherCount = Math.max(total - 3, 1);
-  const tierIndex = Math.min(4, Math.floor((otherRank * 5) / otherCount));
+  const tierIndex = Math.min(5, Math.floor((otherRank * 6) / otherCount));
   const tiers = [
-    { label: '다이아', className: 'bg-[#dce6ff] text-[#334b98]' },
-    { label: '플래티넘', className: 'bg-[#d9f0ea] text-[#28715d]' },
-    { label: '골드', className: 'bg-[#f8e3bb] text-[#9b6a1d]' },
-    { label: '실버', className: 'bg-[#f1f1ee] text-[#697087]' },
-    { label: '브론즈', className: 'bg-[#ead7ca] text-[#85563d]' },
+    { label: '다이아', icon: '💎', className: 'bg-[#e0f2fe] text-[#0369a1] border border-[#bae6fd]' },
+    { label: '플래티넘', icon: '🛡️', className: 'bg-[#ccfbf1] text-[#0f766e] border border-[#99f6e4]' },
+    { label: '골드', icon: '🥇', className: 'bg-[#fef9c3] text-[#a16207] border border-[#fef08a]' },
+    { label: '실버', icon: '🥈', className: 'bg-[#f1f5f9] text-[#475569] border border-[#e2e8f0]' },
+    { label: '브론즈', icon: '🥉', className: 'bg-[#ffedd5] text-[#9a3412] border border-[#fed7aa]' },
+    { label: '아이언', icon: '⚙️', className: 'bg-[#f3f4f6] text-[#6b7280] border border-[#e5e7eb]' },
   ];
   return tiers[tierIndex];
 }
 
 function RankingScreen({ users }: { users: Player[] }) {
+  const availableYears = Array.from(new Set(historyDates.map((date) => date.split('-')[0]))).sort().reverse();
+  const [selectedSeason, setSelectedSeason] = useState<string>('ALL');
   const [selectedDate, setSelectedDate] = useState(historyDates[historyDates.length - 1] ?? '');
-  const allPlayers = users
-    .map((player) => {
-      const record = historicalRecords.find((item) => item.name === player.name);
-      const values = record?.values ?? [];
-      const playedValues = values.filter((value): value is number => value !== null);
-      const wins = playedValues.filter((value) => value > 0).length;
-      const net = playedValues.reduce((sum, value) => sum + value, 0);
-      return {
-        player,
-        played: playedValues.length,
-        wins,
-        losses: playedValues.length - wins,
-        net,
-        winRate: playedValues.length ? wins / playedValues.length : 0,
-        recent: [null, null, ...playedValues.slice(-3)].slice(-3),
-      };
-    })
-    .sort((a, b) => b.net - a.net || b.winRate - a.winRate || b.played - a.played);
-  const rankedPlayers = allPlayers.filter((stat) => stat.played >= 5);
-  const unrankedPlayers = allPlayers.filter((stat) => stat.played < 5);
+
+  // Active indices for the selected season
+  const activeIndices = historyDates
+    .map((date, index) => (selectedSeason === 'ALL' || date.startsWith(selectedSeason) ? index : -1))
+    .filter((index) => index !== -1);
+
+  // Active indices excluding the very last game in the active set (for rank change)
+  const prevIndices = activeIndices.slice(0, -1);
+
+  // Helper to compute stats for a given set of date indices
+  const computeStatsForIndices = (indices: number[]) => {
+    return users
+      .map((player) => {
+        const record = historicalRecords.find((item) => item.name === player.name);
+        const values = record?.values ?? [];
+        const playedValues = indices
+          .map((i) => values[i])
+          .filter((val): val is number => val !== null && val !== undefined);
+        const wins = playedValues.filter((val) => val > 0).length;
+        const net = playedValues.reduce((sum, val) => sum + val, 0);
+        return {
+          player,
+          played: playedValues.length,
+          wins,
+          losses: playedValues.length - wins,
+          net,
+          winRate: playedValues.length ? wins / playedValues.length : 0,
+          recent: [null, null, ...playedValues.slice(-3)].slice(-3),
+        };
+      })
+      .sort((a, b) => b.net - a.net || b.winRate - a.winRate || b.played - a.played);
+  };
+
+  const currentAllStats = computeStatsForIndices(activeIndices);
+  const prevAllStats = computeStatsForIndices(prevIndices);
+
+  // Create previous rank map
+  const minPlayedThreshold = selectedSeason === 'ALL' ? 5 : 1;
+  const prevRanked = prevAllStats.filter((s) => s.played >= minPlayedThreshold);
+  const prevRankMap = new Map<string, number>();
+  prevRanked.forEach((stat, idx) => {
+    prevRankMap.set(stat.player.name, idx + 1);
+  });
+
+  const rankedPlayers = currentAllStats.filter((stat) => stat.played >= minPlayedThreshold);
+  const unrankedPlayers = currentAllStats.filter((stat) => stat.played < minPlayedThreshold);
 
   const selectedDateIndex = historyDates.indexOf(selectedDate);
 
   return (
     <div>
-      <PageHeading eyebrow={`historical ranking · ${historyDates.length} games`} title="지금까지의\n랭킹" />
-      <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
-        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><div><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">ranked · {rankedPlayers.length} players</span><p className="mt-1 text-xs text-[#858a9b]">5회 이상 참여자 · NET 누적상금 · 만원 단위</p></div><Trophy size={18} className="text-[#b38b1e]" /></div>
-        <div className="overflow-x-auto">
-        <div className="min-w-[650px] divide-y divide-[#ececf0]">
-          {rankedPlayers.map((stat, index) => {
-            const rank = index + 1;
-            const tier = rankingTier(rank, rankedPlayers.length);
-            return <div className="p-3" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
-              <div className="grid grid-cols-[32px_180px_120px_86px_1fr] items-center gap-3 whitespace-nowrap">
-                <span className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rank === 1 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>{String(rank).padStart(2, '0')}</span>
-                <div className="flex items-center gap-2"><div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${stat.player.color} ${stat.player.text}`}>{stat.player.name.slice(0, 1)}</div><p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p><span className={`rounded-full px-2 py-1 text-[10px] font-bold ${tier.className}`}>{tier.label}</span></div>
-                <div><p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p><p className="text-[10px] text-[#858a9b]">NET 누적상금</p></div>
-                <div><p className="mono text-sm font-bold text-[#20253a]">{Math.round(stat.winRate * 100)}%</p><p className="text-[10px] text-[#858a9b]">{stat.wins}승 {stat.losses}패</p></div>
-                <div className="flex items-center gap-1.5"><span className="mr-1 text-[10px] text-[#858a9b]">최근 3경기</span>{stat.recent.map((value, recentIndex) => value === null ? <span key={`${stat.player.name}-${recentIndex}`} className="rounded-md bg-[#f1f1ee] px-1.5 py-0.5 text-[10px] font-bold text-[#a0a4b1]">—</span> : <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'}</span>)}</div>
-              </div>
-            </div>;
-          })}
+      {/* Season Filter Selector */}
+      <div className="rise-in mb-4 flex items-center justify-between rounded-2xl border border-[#dfe1ee] bg-white p-2">
+        <span className="ml-2 text-xs font-bold text-[#697087]">시즌 선택</span>
+        <div className="flex gap-1 overflow-x-auto py-1">
+          <button
+            type="button"
+            onClick={() => setSelectedSeason('ALL')}
+            className={`tilt-button rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${
+              selectedSeason === 'ALL' ? 'bg-[#2d3d8f] text-white' : 'bg-[#f1f1ee] text-[#697087] hover:bg-[#e4e5ea]'
+            }`}
+          >
+            전체 시즌
+          </button>
+          {availableYears.map((year) => (
+            <button
+              key={year}
+              type="button"
+              onClick={() => setSelectedSeason(year)}
+              className={`tilt-button rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${
+                selectedSeason === year ? 'bg-[#2d3d8f] text-white' : 'bg-[#f1f1ee] text-[#697087] hover:bg-[#e4e5ea]'
+              }`}
+            >
+              {year} 시즌
+            </button>
+          ))}
         </div>
-        </div>
-      </section>
+      </div>
 
-      <section className="rise-in delay-2 mt-6 tilt-card overflow-hidden" data-testid="card-unranked-list">
-        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4"><div><span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">unranked · {unrankedPlayers.length} players</span><p className="mt-1 text-xs text-[#858a9b]">5회 미만 참여자 · 참여 5회부터 정식 랭킹</p></div><span className="rounded-full bg-[#f1f1ee] px-2 py-1 text-[10px] font-bold text-[#697087]">언랭</span></div>
+      <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
+        <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4">
+          <div>
+            <span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">
+              ranked · {rankedPlayers.length} players ({selectedSeason === 'ALL' ? '전체' : `${selectedSeason}년`})
+            </span>
+            <p className="mt-1 text-xs text-[#858a9b]">
+              {selectedSeason === 'ALL' ? '5회 이상' : '1회 이상'} 참여자 · NET 누적상금 · 만원 단위
+            </p>
+          </div>
+          <Trophy size={18} className="text-[#b38b1e]" />
+        </div>
         <div className="overflow-x-auto">
           <div className="min-w-[650px] divide-y divide-[#ececf0]">
-            {unrankedPlayers.map((stat, index) => (
-              <div className="p-3" key={stat.player.name} data-testid={`row-unranked-${stat.player.name}`}>
-                <div className="grid grid-cols-[32px_180px_120px_86px_1fr] items-center gap-3 whitespace-nowrap">
-                  <span className="mono flex h-7 w-7 items-center justify-center rounded-full bg-[#f1f1ee] text-xs font-bold text-[#858a9b]">{String(index + 1).padStart(2, '0')}</span>
-                  <div className="flex items-center gap-2"><div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${stat.player.color} ${stat.player.text}`}>{stat.player.name.slice(0, 1)}</div><p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p><span className="rounded-full bg-[#f1f1ee] px-2 py-1 text-[10px] font-bold text-[#697087]">언랭</span></div>
-                  <div><p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p><p className="text-[10px] text-[#858a9b]">NET 누적상금</p></div>
-                  <div><p className="mono text-sm font-bold text-[#20253a]">{Math.round(stat.winRate * 100)}%</p><p className="text-[10px] text-[#858a9b]">{stat.wins}승 {stat.losses}패 · {stat.played}회</p></div>
-                  <div className="flex items-center gap-1.5"><span className="mr-1 text-[10px] text-[#858a9b]">최근 3경기</span>{stat.recent.map((value, recentIndex) => value === null ? <span key={`${stat.player.name}-${recentIndex}`} className="rounded-md bg-[#f1f1ee] px-1.5 py-0.5 text-[10px] font-bold text-[#a0a4b1]">—</span> : <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'}</span>)}</div>
+            {rankedPlayers.map((stat, index) => {
+              const rank = index + 1;
+              const tier = rankingTier(rank, rankedPlayers.length);
+              const prevRank = prevRankMap.get(stat.player.name);
+              let rankChange: React.ReactNode = null;
+              if (prevRank === undefined) {
+                rankChange = <span className="mono text-[9px] font-extrabold text-[#2563eb]">NEW</span>;
+              } else {
+                const diff = prevRank - rank;
+                if (diff > 0) {
+                  rankChange = <span className="mono text-[10px] font-extrabold text-[#16a34a]">▲{diff}</span>;
+                } else if (diff < 0) {
+                  rankChange = <span className="mono text-[10px] font-extrabold text-[#dc2626]">▼{Math.abs(diff)}</span>;
+                } else {
+                  rankChange = <span className="mono text-[10px] font-bold text-[#9ca3af]">-</span>;
+                }
+              }
+
+              return (
+                <div className="p-3" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
+                  <div className="grid grid-cols-[64px_210px_110px_80px_1fr] items-center gap-2 whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rank === 1 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>
+                        {String(rank).padStart(2, '0')}
+                      </span>
+                      <div className="flex w-6 justify-center">{rankChange}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${stat.player.color} ${stat.player.text}`}>
+                        {stat.player.name.slice(0, 1)}
+                      </div>
+                      <p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${tier.className}`}>
+                        <span>{tier.icon}</span>
+                        <span>{tier.label}</span>
+                      </span>
+                    </div>
+                    <div>
+                      <p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p>
+                      <p className="text-[10px] text-[#858a9b]">NET 누적상금</p>
+                    </div>
+                    <div>
+                      <p className="mono text-sm font-bold text-[#20253a]">{Math.round(stat.winRate * 100)}%</p>
+                      <p className="text-[10px] text-[#858a9b]">{stat.wins}승 {stat.losses}패</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="mr-1 text-[10px] text-[#858a9b]">최근 3경기</span>
+                      {stat.recent.map((value, recentIndex) =>
+                        value === null ? (
+                          <span key={`${stat.player.name}-${recentIndex}`} className="rounded-md bg-[#f1f1ee] px-1.5 py-0.5 text-[10px] font-bold text-[#a0a4b1]">
+                            —
+                          </span>
+                        ) : (
+                          <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>
+                            {value > 0 ? '승' : '패'}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
+
+      {unrankedPlayers.length > 0 ? (
+        <section className="rise-in delay-2 mt-6 tilt-card overflow-hidden" data-testid="card-unranked-list">
+          <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4">
+            <div>
+              <span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">
+                unranked · {unrankedPlayers.length} players
+              </span>
+              <p className="mt-1 text-xs text-[#858a9b]">5회 미만 참여자 · 참여 5회부터 정식 랭킹</p>
+            </div>
+            <span className="rounded-full bg-[#f1f1ee] px-2 py-1 text-[10px] font-bold text-[#697087]">언랭</span>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[650px] divide-y divide-[#ececf0]">
+              {unrankedPlayers.map((stat, index) => (
+                <div className="p-3" key={stat.player.name} data-testid={`row-unranked-${stat.player.name}`}>
+                  <div className="grid grid-cols-[64px_210px_110px_80px_1fr] items-center gap-2 whitespace-nowrap">
+                    <span className="mono flex h-7 w-7 items-center justify-center rounded-full bg-[#f1f1ee] text-xs font-bold text-[#858a9b]">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${stat.player.color} ${stat.player.text}`}>
+                        {stat.player.name.slice(0, 1)}
+                      </div>
+                      <p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p>
+                      <span className="rounded-full bg-[#f1f1ee] px-2 py-0.5 text-[10px] font-bold text-[#697087]">언랭</span>
+                    </div>
+                    <div>
+                      <p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p>
+                      <p className="text-[10px] text-[#858a9b]">NET 누적상금</p>
+                    </div>
+                    <div>
+                      <p className="mono text-sm font-bold text-[#20253a]">{Math.round(stat.winRate * 100)}%</p>
+                      <p className="text-[10px] text-[#858a9b]">{stat.wins}승 {stat.losses}패 · {stat.played}회</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="mr-1 text-[10px] text-[#858a9b]">최근 3경기</span>
+                      {stat.recent.map((value, recentIndex) =>
+                        value === null ? (
+                          <span key={`${stat.player.name}-${recentIndex}`} className="rounded-md bg-[#f1f1ee] px-1.5 py-0.5 text-[10px] font-bold text-[#a0a4b1]">
+                            —
+                          </span>
+                        ) : (
+                          <span key={`${stat.player.name}-${recentIndex}`} className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>
+                            {value > 0 ? '승' : '패'}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="rise-in delay-2 mt-6" data-testid="section-date-results">
         <div className="mb-3 flex items-end justify-between"><div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">date results</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">날짜별 결과</h3></div><span className="text-xs text-[#858a9b]">총 {historyDates.length}회</span></div>
@@ -826,7 +931,6 @@ function FundScreen({
   const spentThisMonth = fundEntries.filter((entry) => entry.amount < 0).reduce((total, entry) => total + Math.abs(entry.amount), 0);
   return (
     <div>
-      <PageHeading eyebrow="shared wallet" title="우리 공금,\n지금 얼마 남았지?" description="간식부터 다음 게임 대여비까지. 함께 쓰는 돈을 한눈에 확인하세요." />
       <section className="rise-in delay-1 tilt-card bg-[#fff0e9] p-5 sm:p-7" data-testid="card-fund-balance">
         <div className="flex items-start justify-between"><div><p className="text-sm font-semibold text-[#8e5347]">현재 공금 잔액</p><p className="mono mt-2 text-[34px] font-bold tracking-[-0.09em] text-[#20253a]">{formatWon(fundBalance)}</p></div><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#bd604d]"><Landmark size={20} /></div></div>
         <div className="mt-6 flex items-center justify-between border-t border-[#efcfc6] pt-4 text-xs"><span className="text-[#8e5347]">누적 사용액</span><span className="mono font-bold text-[#20253a]">{formatWon(spentThisMonth)}</span></div>
