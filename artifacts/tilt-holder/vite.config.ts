@@ -5,27 +5,15 @@ import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    'PORT environment variable is required but was not provided.',
-  );
-}
-
+// Vercel 등 외부 호스팅 빌드 시 PORT가 없어도 터지지 않도록 기본값(5173) 지정
+const rawPort = process.env.PORT || '5173';
 const port = Number(rawPort);
 
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
+// 에러 처리 대신 기본 포트 사용
+const finalPort = (Number.isNaN(port) || port <= 0) ? 5173 : port;
 
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    'BASE_PATH environment variable is required but was not provided.',
-  );
-}
+// Vercel 배포 시 CSS 경로를 올바르게 잡기 위해 기본값을 '/'로 지정
+const basePath = process.env.BASE_PATH || '/';
 
 export default defineConfig({
   base: basePath,
@@ -65,7 +53,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port,
+    port: finalPort,
     strictPort: true,
     host: '0.0.0.0',
     allowedHosts: true,
@@ -74,7 +62,7 @@ export default defineConfig({
     },
   },
   preview: {
-    port,
+    port: finalPort,
     host: '0.0.0.0',
     allowedHosts: true,
   },
