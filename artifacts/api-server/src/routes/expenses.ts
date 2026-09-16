@@ -50,6 +50,27 @@ router.post("/expenses", async (req, res) => {
   }
 });
 
+router.patch("/expenses/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { settled } = req.body;
+    if (!db) {
+      res.status(503).json({ error: "Database not available" });
+      return;
+    }
+
+    const [updated] = await db.update(expensesTable)
+      .set({ settled })
+      .where(eq(expensesTable.id, id))
+      .returning();
+
+    res.json(updated);
+  } catch (error) {
+    console.error("Failed to update expense:", error);
+    res.status(500).json({ error: "Failed to update expense" });
+  }
+});
+
 router.delete("/expenses/:id", async (req, res) => {
   try {
     const id = req.params.id;

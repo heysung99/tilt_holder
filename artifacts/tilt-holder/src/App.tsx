@@ -774,12 +774,23 @@ function SettleScreen({
   onFinishSession: () => void;
 }) {
   const [showExpense, setShowExpense] = useState(false);
-  const [settled, setSettled] = useState<string[]>([]);
+  const [settled, setSettled] = useState<string[]>(() => expenses.filter((e: ExpenseEntry & { settled?: boolean }) => e.settled).map((e) => e.id));
   const [newExpense, setNewExpense] = useState({ title: '', amount: '' });
   const expenseTotal = expenses.reduce((total, expense) => total + expense.amount, 0);
   const projectedFundBalance = session.fundApplied ? fundBalance : fundBalance + grossFundContribution;
 
-  const markSettled = (id: string) => setSettled((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  const markSettled = (id: string) => {
+    setSettled((current) => {
+      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      const isNowSettled = next.includes(id);
+      fetch(`/api/expenses/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settled: isNowSettled }),
+      }).catch(console.error);
+      return next;
+    });
+  };
 
   return (
     <div>
