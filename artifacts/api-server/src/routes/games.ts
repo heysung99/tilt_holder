@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, gamesTable } from "@workspace/db";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -31,6 +31,9 @@ router.post("/games", async (req, res) => {
       return;
     }
 
+    // Upsert or insert game for date
+    await db.delete(gamesTable).where(eq(gamesTable.date, date));
+
     const [inserted] = await db.insert(gamesTable).values({
       date,
       gameName,
@@ -44,6 +47,22 @@ router.post("/games", async (req, res) => {
   } catch (error) {
     console.error("Failed to save game:", error);
     res.status(500).json({ error: "Failed to save game result" });
+  }
+});
+
+router.delete("/games/:date", async (req, res) => {
+  try {
+    const date = req.params.date;
+    if (!db) {
+      res.status(503).json({ error: "Database not available" });
+      return;
+    }
+
+    await db.delete(gamesTable).where(eq(gamesTable.date, date));
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete game:", error);
+    res.status(500).json({ error: "Failed to delete game" });
   }
 });
 

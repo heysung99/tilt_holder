@@ -205,44 +205,57 @@ function AppShell() {
   }, [historicalRecords]);
 
   useEffect(() => {
-    fetch('/api/games')
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((savedGames: Array<{ date: string; gameName: string; participantNames: string[]; results: Record<string, number> }>) => {
-        if (!Array.isArray(savedGames) || savedGames.length === 0) return;
-
-        setHistoryDates((currentDates) => {
-          const nextDates = [...currentDates];
-          savedGames.forEach((game) => {
-            if (!nextDates.includes(game.date)) {
-              nextDates.push(game.date);
-            }
-          });
-
-          setHistoricalRecords((currentRecords) => {
-            const nextRecords = [...currentRecords];
-            savedGames.forEach((game) => {
-              const dateIndex = nextDates.indexOf(game.date);
-              const resultsMap = new Map(Object.entries(game.results || {}));
-
-              nextRecords.forEach((record) => {
-                const values = [...record.values];
-                while (values.length <= dateIndex) {
-                  values.push(null);
-                }
-                if (resultsMap.has(record.name)) {
-                  values[dateIndex] = resultsMap.get(record.name) ?? null;
-                }
-                record.values = values;
-              });
+    Promise.all([
+      fetch('/api/users').then((r) => (r.ok ? r.json() : [])),
+      fetch('/api/expenses').then((r) => (r.ok ? r.json() : [])),
+      fetch('/api/fund').then((r) => (r.ok ? r.json() : [])),
+      fetch('/api/games').then((r) => (r.ok ? r.json() : [])),
+    ])
+      .then(([serverUsers, serverExpenses, serverFund, serverGames]) => {
+        if (Array.isArray(serverUsers) && serverUsers.length > 0) {
+          setUsers(serverUsers);
+        }
+        if (Array.isArray(serverExpenses)) {
+          setExpenses(serverExpenses);
+        }
+        if (Array.isArray(serverFund)) {
+          setFundEntries(serverFund);
+        }
+        if (Array.isArray(serverGames) && serverGames.length > 0) {
+          setHistoryDates((currentDates) => {
+            const nextDates = [...currentDates];
+            serverGames.forEach((game: { date: string }) => {
+              if (!nextDates.includes(game.date)) {
+                nextDates.push(game.date);
+              }
             });
-            return nextRecords;
-          });
 
-          return nextDates;
-        });
+            setHistoricalRecords((currentRecords) => {
+              const nextRecords = [...currentRecords];
+              serverGames.forEach((game: { date: string; results: Record<string, number> }) => {
+                const dateIndex = nextDates.indexOf(game.date);
+                const resultsMap = new Map(Object.entries(game.results || {}));
+
+                nextRecords.forEach((record) => {
+                  const values = [...record.values];
+                  while (values.length <= dateIndex) {
+                    values.push(null);
+                  }
+                  if (resultsMap.has(record.name)) {
+                    values[dateIndex] = resultsMap.get(record.name) ?? null;
+                  }
+                  record.values = values;
+                });
+              });
+              return nextRecords;
+            });
+
+            return nextDates;
+          });
+        }
       })
-      .catch(() => {
-        // Fallback to local
+      .catch((err) => {
+        console.error('Failed to fetch from central DB:', err);
       });
   }, []);
 
@@ -299,7 +312,13 @@ function AppShell() {
     const trimmedName = name.trim();
     if (!trimmedName || users.some((user) => user.name === trimmedName)) return false;
     const style = avatarStyles[users.length % avatarStyles.length];
-    setUsers((current) => [...current, { name: trimmedName, score: 0, color: style[0], text: style[1] }]);
+    const newUser = { name: trimmedName, score: 0, color: style[0], text: style[1] };
+    setUsers((current) => [...current, newUser]);
+    fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newUser),
+    }).catch(console.error);
     return true;
   };
 
@@ -307,6 +326,11 @@ function AppShell() {
     const trimmedName = nextName.trim();
     if (!trimmedName || currentName === trimmedName || users.some((user) => user.name === trimmedName)) return false;
     setUsers((current) => current.map((user) => user.name === currentName ? { ...user, name: trimmedName } : user));
+    fetch(`/api/users/${encodeURIComponent(currentName)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nextName: trimmedName }),
+    }).catch(console.error);
     setSession((current) => {
       const participantNames = current.participantNames.map((name) => name === currentName ? trimmedName : name);
       const buyIns = { ...current.buyIns };
@@ -333,20 +357,34 @@ function AppShell() {
 
   const addExpense = (title: string, amount: number) => {
     const id = `expense-${Date.now()}`;
-    const expense = { id, title, payer: '모임 공금', amount, time: '방금 전' };
+    const expense = { id, title, payer: '모임 공금', amount, time: '방금 전', settled: false };
     setExpenses((current) => [expense, ...current]);
-    setFundEntries((current) => [
-      ...current,
-      { id, title, meta: `모임 공금 · ${formatSessionDate(session.date)}`, amount: -amount },
-    ]);
+    const fundItem = { id, title, meta: `모임 공금 · ${formatSessionDate(session.date)}`, amount: -amount };
+    setFundEntries((current) => [...current, fundItem]);
+
+    fetch('/api/expenses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(expense),
+    }).catch(console.error);
+
+    fetch('/api/fund', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fundItem),
+    }).catch(console.error);
   };
 
   const addFundDeposit = (amount: number) => {
     const id = `deposit-${Date.now()}`;
-    setFundEntries((current) => [
-      ...current,
-      { id, title: '공금 직접 입금', meta: `오늘 · ${formatSessionDate(session.date)}`, amount },
-    ]);
+    const fundItem = { id, title: '공금 직접 입금', meta: `오늘 · ${formatSessionDate(session.date)}`, amount };
+    setFundEntries((current) => [...current, fundItem]);
+
+    fetch('/api/fund', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fundItem),
+    }).catch(console.error);
   };
 
   const finishSession = () => {
@@ -441,11 +479,22 @@ function AppShell() {
         return { ...record, values };
       })
     );
+
+    fetch(`/api/games/${encodeURIComponent(dateToDelete)}`, {
+      method: 'DELETE',
+    }).catch(console.error);
   };
 
   const deleteFundEntry = (entryId: string) => {
     setExpenses((current) => current.filter((e) => e.id !== entryId));
     setFundEntries((current) => current.filter((f) => f.id !== entryId));
+
+    fetch(`/api/fund/${encodeURIComponent(entryId)}`, {
+      method: 'DELETE',
+    }).catch(console.error);
+    fetch(`/api/expenses/${encodeURIComponent(entryId)}`, {
+      method: 'DELETE',
+    }).catch(console.error);
   };
 
   const completeSettlement = () => {
