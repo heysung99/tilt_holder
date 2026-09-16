@@ -153,6 +153,32 @@ function AppShell() {
   const [historyDates, setHistoryDates] = useState<string[]>(() => readStored('tilt-holder-history-dates-v1', initialHistoryDates));
   const [historicalRecords, setHistoricalRecords] = useState<HistoricalRecord[]>(() => readStored('tilt-holder-historical-records-v1', initialHistoricalRecords));
   const [showSettlementModal, setShowSettlementModal] = useState(false);
+  const [passwordModalConfig, setPasswordModalConfig] = useState<PasswordModalConfig>(null);
+
+  const requestCreateSession = (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => {
+    setPasswordModalConfig({
+      title: '게임 세션 만들기 비밀번호',
+      onSuccess: () => createSession(draft),
+    });
+  };
+
+  const requestCompleteSettlement = () => {
+    setPasswordModalConfig({
+      title: '정산하기 관리자 비밀번호',
+      onSuccess: () => {
+        if (totalBuyIns !== totalFinalChips) {
+          window.alert('정산이 제대로 되지 않았습니다.');
+          return;
+        }
+        finishSession();
+        setShowSettlementModal(true);
+      },
+    });
+  };
+
+  const verifyPassword = (title: string, onSuccess: () => void) => {
+    setPasswordModalConfig({ title, onSuccess });
+  };
 
   useEffect(() => {
     window.localStorage.setItem('tilt-holder-users-v3', JSON.stringify(users));
@@ -449,7 +475,7 @@ function AppShell() {
             session={session}
             users={users}
             historicalRecords={historicalRecords}
-            onCreateSession={createSession}
+            onCreateSession={requestCreateSession}
             onBuyInChange={updateBuyIn}
             onAddUser={addUser}
             onRenameUser={renameUser}
@@ -468,7 +494,7 @@ function AppShell() {
             totalFinalChips={totalFinalChips}
             onFinalAmountChange={updateFinalAmount}
             onAddExpense={addExpense}
-            onFinishSession={completeSettlement}
+            onFinishSession={requestCompleteSettlement}
           />
         )}
         {activeTab === 'ranking' && (
@@ -477,6 +503,7 @@ function AppShell() {
             historyDates={historyDates}
             historicalRecords={historicalRecords}
             onDeleteHistoryDate={deleteHistoryDate}
+            onVerifyPassword={verifyPassword}
           />
         )}
         {activeTab === 'fund' && (
@@ -485,6 +512,7 @@ function AppShell() {
             fundBalance={fundBalance}
             onAddDeposit={addFundDeposit}
             onDeleteFundEntry={deleteFundEntry}
+            onVerifyPassword={verifyPassword}
           />
         )}
         <div className="h-64" />
@@ -497,6 +525,10 @@ function AppShell() {
           onClose={() => setShowSettlementModal(false)}
         />
       ) : null}
+      <PasswordModal
+        config={passwordModalConfig}
+        onClose={() => setPasswordModalConfig(null)}
+      />
       <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );
@@ -642,11 +674,6 @@ function NewSessionForm({
       data-testid="form-new-session"
       onSubmit={(event) => {
         event.preventDefault();
-        const pwd = window.prompt('관리자 비밀번호를 입력하세요 (0511):');
-        if (pwd !== '0511') {
-          window.alert('비밀번호가 틀렸습니다.');
-          return;
-        }
         if (participantNames.length > 0 && gameName.trim()) {
           onCreate({ date, gameName: gameName.trim(), participantNames, hostName: hostName!, bankName: bankName! });
         }
@@ -833,11 +860,13 @@ function RankingScreen({
   historyDates,
   historicalRecords,
   onDeleteHistoryDate,
+  onVerifyPassword,
 }: {
   users: Player[];
   historyDates: string[];
   historicalRecords: HistoricalRecord[];
   onDeleteHistoryDate: (date: string) => void;
+  onVerifyPassword: (title: string, onSuccess: () => void) => void;
 }) {
   const availableYears = Array.from(new Set(historyDates.map((date) => date.split('-')[0]))).sort().reverse();
   const [selectedSeason, setSelectedSeason] = useState<string>('ALL');
@@ -849,12 +878,7 @@ function RankingScreen({
       setIsAdmin(false);
       return;
     }
-    const pwd = window.prompt('관리자 비밀번호를 입력하세요 (0511):');
-    if (pwd === '0511') {
-      setIsAdmin(true);
-    } else if (pwd !== null) {
-      window.alert('비밀번호가 틀렸습니다.');
-    }
+    onVerifyPassword('랭킹 관리자 모드 비밀번호', () => setIsAdmin(true));
   };
 
   // Active indices for the selected season
@@ -1118,11 +1142,13 @@ function FundScreen({
   fundBalance,
   onAddDeposit,
   onDeleteFundEntry,
+  onVerifyPassword,
 }: {
   fundEntries: FundEntry[];
   fundBalance: number;
   onAddDeposit: (amount: number) => void;
   onDeleteFundEntry: (id: string) => void;
+  onVerifyPassword: (title: string, onSuccess: () => void) => void;
 }) {
   const [showFundForm, setShowFundForm] = useState(false);
   const [fundAmount, setFundAmount] = useState('');
@@ -1134,12 +1160,7 @@ function FundScreen({
       setIsAdmin(false);
       return;
     }
-    const pwd = window.prompt('관리자 비밀번호를 입력하세요 (0511):');
-    if (pwd === '0511') {
-      setIsAdmin(true);
-    } else if (pwd !== null) {
-      window.alert('비밀번호가 틀렸습니다.');
-    }
+    onVerifyPassword('공금 관리자 모드 비밀번호', () => setIsAdmin(true));
   };
 
   return (
@@ -1390,6 +1411,58 @@ function downloadSettlementImage(session: SessionState, settlementRows: Settleme
   link.download = `settlement-${session.date}.png`;
   link.href = canvas.toDataURL('image/png');
   link.click();
+}
+
+type PasswordModalConfig = {
+  title: string;
+  onSuccess: () => void;
+} | null;
+
+function PasswordModal({
+  config,
+  onClose,
+}: {
+  config: PasswordModalConfig;
+  onClose: () => void;
+}) {
+  const [pwd, setPwd] = useState('');
+  const [error, setError] = useState(false);
+
+  if (!config) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pwd === '0511') {
+      config.onSuccess();
+      onClose();
+    } else {
+      setError(true);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+      <form onSubmit={handleSubmit} className="rise-in w-full max-w-[380px] rounded-[24px] bg-white p-6 shadow-2xl sm:p-7">
+        <h3 className="text-lg font-bold text-[#20253a]">{config.title}</h3>
+        <p className="mt-1 text-xs text-[#697087]">비밀번호를 입력해주세요 (0511)</p>
+        
+        <input
+          type="password"
+          value={pwd}
+          onChange={(e) => { setPwd(e.target.value); setError(false); }}
+          className="mt-4 h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm outline-none focus:border-[#2d3d8f]"
+          placeholder="비밀번호 입력"
+          autoFocus
+        />
+        {error ? <p className="mt-1.5 text-xs font-semibold text-[#bd604d]">비밀번호가 틀렸습니다.</p> : null}
+
+        <div className="mt-5 flex gap-2">
+          <button type="submit" className="tilt-button flex-1 rounded-xl bg-[#2d3d8f] px-4 py-2.5 text-xs font-bold text-white">확인</button>
+          <button type="button" onClick={onClose} className="tilt-button rounded-xl border border-[#dfe1ee] bg-white px-4 py-2.5 text-xs font-bold text-[#697087]">취소</button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 function App() {
