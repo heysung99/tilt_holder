@@ -118,16 +118,6 @@ function makeAmountRecord(names: PlayerName[], amount: number) {
   return Object.fromEntries(names.map((name) => [name, amount])) as Record<string, number>;
 }
 
-function readStored<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const stored = window.localStorage.getItem(key);
-    return stored ? JSON.parse(stored) as T : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 const initialSession: SessionState = {
   date: '2026-09-11',
   gameName: '오늘의 게임',
@@ -146,12 +136,12 @@ const initialFundEntries: FundEntry[] = [];
 
 function AppShell() {
   const [activeTab, setActiveTab] = useState<TabKey>('game');
-  const [users, setUsers] = useState<Player[]>(() => readStored('tilt-holder-users-v3', initialPlayers));
-  const [session, setSession] = useState<SessionState>(() => readStored('tilt-holder-session-v2', initialSession));
-  const [expenses, setExpenses] = useState<ExpenseEntry[]>(() => readStored('tilt-holder-expenses-v3', initialExpenses));
-  const [fundEntries, setFundEntries] = useState<FundEntry[]>(() => readStored('tilt-holder-fund-entries-v3', initialFundEntries));
-  const [historyDates, setHistoryDates] = useState<string[]>(() => readStored('tilt-holder-history-dates-v1', initialHistoryDates));
-  const [historicalRecords, setHistoricalRecords] = useState<HistoricalRecord[]>(() => readStored('tilt-holder-historical-records-v1', initialHistoricalRecords));
+  const [users, setUsers] = useState<Player[]>(initialPlayers);
+  const [session, setSession] = useState<SessionState>(initialSession);
+  const [expenses, setExpenses] = useState<ExpenseEntry[]>(initialExpenses);
+  const [fundEntries, setFundEntries] = useState<FundEntry[]>(initialFundEntries);
+  const [historyDates, setHistoryDates] = useState<string[]>(initialHistoryDates);
+  const [historicalRecords, setHistoricalRecords] = useState<HistoricalRecord[]>(initialHistoricalRecords);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [passwordModalConfig, setPasswordModalConfig] = useState<PasswordModalConfig>(null);
 
@@ -179,30 +169,6 @@ function AppShell() {
   const verifyPassword = (title: string, onSuccess: () => void) => {
     setPasswordModalConfig({ title, onSuccess });
   };
-
-  useEffect(() => {
-    window.localStorage.setItem('tilt-holder-users-v3', JSON.stringify(users));
-  }, [users]);
-
-  useEffect(() => {
-    window.localStorage.setItem('tilt-holder-session-v2', JSON.stringify(session));
-  }, [session]);
-
-  useEffect(() => {
-    window.localStorage.setItem('tilt-holder-expenses-v3', JSON.stringify(expenses));
-  }, [expenses]);
-
-  useEffect(() => {
-    window.localStorage.setItem('tilt-holder-fund-entries-v3', JSON.stringify(fundEntries));
-  }, [fundEntries]);
-
-  useEffect(() => {
-    window.localStorage.setItem('tilt-holder-history-dates-v1', JSON.stringify(historyDates));
-  }, [historyDates]);
-
-  useEffect(() => {
-    window.localStorage.setItem('tilt-holder-historical-records-v1', JSON.stringify(historicalRecords));
-  }, [historicalRecords]);
 
   useEffect(() => {
     Promise.all([
