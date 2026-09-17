@@ -1,6 +1,7 @@
 {
   "version": 2,
-  "outputDirectory": "artifacts/tilt-holder/dist",
+  "buildCommand": "pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/tilt-holder run build && node -e \"const fs=require('fs'); fs.cpSync('artifacts/tilt-holder/dist', 'dist', {recursive: true})\"",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
