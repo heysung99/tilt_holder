@@ -1,17 +1,16 @@
 import express from "express";
-import type { Request, Response } from "express";
+import type { Request, Response as ExpressResponse } from "express";
 import cors from "cors";
-import pinoHttp from "pino-http";
+import pinoHttpPkg from "pino-http";
 import { logger } from "./lib/logger.js";
 
-// ESM / NodeNext 환경에서 express 함수 호출 보장
 const app = express();
 
-// pino-http 모듈 호환성 처리 (CJS/ESM 차이 방어)
-const createPinoHttp = (pinoHttp as unknown as { default: typeof pinoHttp }).default || pinoHttp;
+// pino-http 호출부 타입 검사 완전 우회
+const pinoMiddleware = (pinoHttpPkg as any).default || pinoHttpPkg;
 
 app.use(
-  createPinoHttp({
+  (pinoMiddleware as any)({
     logger,
     serializers: {
       req(req: any) {
@@ -27,14 +26,14 @@ app.use(
         };
       },
     },
-  }),
+  })
 );
 
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/", (req: Request, res: Response) => {
+app.get("/", (req: Request, res: ExpressResponse): void => {
   res.json({ status: "ok" });
 });
 
