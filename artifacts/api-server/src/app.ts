@@ -1,15 +1,17 @@
-import express, { type Express, type Request, type Response } from "express";
+import express from "express";
+import type { Request, Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import { logger } from "./lib/logger.js"; // 👈 node16/nodenext 규칙에 따라 .js 필수!
+import { logger } from "./lib/logger.js";
 
-const app: Express = express();
+// ESM / NodeNext 환경에서 express 함수 호출 보장
+const app = express();
 
-// pino-http CJS/ESM 모듈 호환성 처리 (TS2349 에러 방지)
-const pinoMiddleware = (pinoHttp as unknown as { default: typeof pinoHttp }).default || pinoHttp;
+// pino-http 모듈 호환성 처리 (CJS/ESM 차이 방어)
+const createPinoHttp = (pinoHttp as unknown as { default: typeof pinoHttp }).default || pinoHttp;
 
 app.use(
-  pinoMiddleware({
+  createPinoHttp({
     logger,
     serializers: {
       req(req: any) {
