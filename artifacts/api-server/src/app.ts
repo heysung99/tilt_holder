@@ -1,8 +1,8 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import router from "./routes";
-import { logger } from "./lib/logger";
+import router from "./routes.js";       // 👈 끝에 .js 추가
+import { logger } from "./lib/logger.js"; // 👈 끝에 .js 추가
 
 const app: Express = express();
 
