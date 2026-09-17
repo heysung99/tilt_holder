@@ -1,12 +1,10 @@
 import express from "express";
-import type { Request, Response as ExpressResponse } from "express";
 import cors from "cors";
 import pinoHttpPkg from "pino-http";
 import { logger } from "./lib/logger.js";
 
 const app = express();
 
-// pino-http 호출부 타입 검사 완전 우회
 const pinoMiddleware = (pinoHttpPkg as any).default || pinoHttpPkg;
 
 app.use(
@@ -33,7 +31,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/", (req: Request, res: ExpressResponse): void => {
+// 타입을 명시하는 대신 매개변수를 any로 처리하여 타입 충돌 원천 차단
+app.get("/", (req: any, res: any) => {
   res.json({ status: "ok" });
 });
 
