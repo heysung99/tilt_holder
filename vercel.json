@@ -1,8 +1,9 @@
 {
   "version": 2,
+  "buildCommand": "PORT=5000 pnpm --filter @workspace/api-server run build && pnpm --filter @workspace/tilt-holder run build",
   "builds": [
     {
-      "src": "artifacts/api-server/src/index.ts",
+      "src": "artifacts/api-server/dist/index.mjs",
       "use": "@vercel/node"
     },
     {
@@ -16,7 +17,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "artifacts/api-server/src/index.ts"
+      "dest": "artifacts/api-server/dist/index.mjs"
     },
     {
       "src": "/(.*)",
