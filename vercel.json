@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "outputDirectory": "artifacts/tilt-holder/dist/public",
+  "outputDirectory": "artifacts/tilt-holder/dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
