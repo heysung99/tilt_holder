@@ -1,12 +1,15 @@
-import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import { logger } from "./lib/logger"; // .js 없이 임포트
+import { logger } from "./lib/logger.js"; // 👈 node16/nodenext 규칙에 따라 .js 필수!
 
 const app: Express = express();
 
+// pino-http CJS/ESM 모듈 호환성 처리 (TS2349 에러 방지)
+const pinoMiddleware = (pinoHttp as unknown as { default: typeof pinoHttp }).default || pinoHttp;
+
 app.use(
-  pinoHttp({
+  pinoMiddleware({
     logger,
     serializers: {
       req(req: any) {
@@ -29,7 +32,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 라우터 파일이 아직 없다면 임시로 기본 라우트를 넣어 에러를 방지합니다.
 app.get("/", (req: Request, res: Response) => {
   res.json({ status: "ok" });
 });
