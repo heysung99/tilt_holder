@@ -17,10 +17,5 @@
   "devDependencies": {
     "prettier": "^3.9.6",
     "typescript": "~5.9.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "drizzle-orm": "커스텀 버전 또는 DB 패키지가 쓰는 정확한 버전 명시"
-    }
   }
 }

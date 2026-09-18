@@ -420,15 +420,21 @@ function AppShell() {
     });
 
     if (grossFundContribution !== 0) {
-      setFundEntries((current) => [
-        ...current,
-        {
-          id: `game-${session.date}-${session.gameName}`,
-          title: `${session.gameName} 정산 공금`,
-          meta: `${formatSessionDate(session.date)} · 손실금 - 지급액`,
-          amount: grossFundContribution,
-        },
-      ]);
+      const fundItem = {
+        id: `game-${session.date}-${session.gameName}`,
+        title: `${session.gameName} 정산 공금`,
+        meta: `${formatSessionDate(session.date)} · 손실금 - 지급액`,
+        amount: grossFundContribution,
+      };
+      setFundEntries((current) => [...current, fundItem]);
+
+      fetch('/api/fund', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fundItem),
+      }).catch((err) => {
+        console.error('Failed to sync settlement fund entry to server database:', err);
+      });
     }
     setSession((current) => ({ ...current, isFinished: true, fundApplied: true }));
   };

@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://tilt-holder-api-server.vercel.app/api/$1"
+      "destination": "/api"
     }
   ]
 }
