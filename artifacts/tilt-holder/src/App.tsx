@@ -822,9 +822,9 @@ function GameScreen({
                     ) : null}
                   </div>
                   {isEditingBuyIns ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg border border-[#dfe1ee] text-[#2d3d8f] hover:bg-[#eef0ff]" aria-label={`${player.name} 바이인 1회 줄이기`} data-testid={`button-buy-in-minus-${player.name}`} onClick={() => onBuyInChange(player.name, -1)}><Minus size={15} /></button>
-                      <span className="mono min-w-10 text-center text-base font-bold text-[#20253a]" data-testid={`count-buy-in-${player.name}`}>{session.buyIns[player.name] ?? 0}</span>
+                      <span className="mono min-w-6 text-center text-base font-bold text-[#20253a]" data-testid={`count-buy-in-${player.name}`}>{session.buyIns[player.name] ?? 0}</span>
                       <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg bg-[#2d3d8f] text-white hover:bg-[#202e74]" aria-label={`${player.name} 바이인 1회 추가`} data-testid={`button-buy-in-plus-${player.name}`} onClick={() => onBuyInChange(player.name, 1)}><Plus size={15} /></button>
                     </div>
                   ) : (
@@ -1735,10 +1735,34 @@ function downloadSettlementImage(session: SessionState, settlementRows: Settleme
   const finalTextWidth = ctx.measureText(finalText).width;
   ctx.fillText(finalText, 760 - finalTextWidth, y);
 
-  const link = document.createElement('a');
-  link.download = `settlement-${session.date}.png`;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
+  const fileName = `settlement-${session.date}.png`;
+
+  const downloadViaLink = (blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+
+    const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
+    const file = new File([blob], fileName, { type: 'image/png' });
+    if (nav.canShare && nav.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: 'TILT HOLDER 정산 결과' }).catch(() => {
+        // Share sheet dismissed or unsupported mid-flight; fall back to a direct download.
+        downloadViaLink(blob);
+      });
+      return;
+    }
+
+    downloadViaLink(blob);
+  }, 'image/png');
 }
 
 type PasswordModalConfig = {
