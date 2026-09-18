@@ -13,6 +13,7 @@ import {
   Clock3,
   Crown,
   Coins,
+  Download,
   Gamepad2,
   Landmark,
   Minus,
@@ -58,6 +59,11 @@ type BuyInLogEntry = {
   name: PlayerName;
   delta: number;
   after: number;
+};
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
 };
 
 type ExpenseEntry = {
@@ -148,6 +154,36 @@ function AppShell() {
   const [buyInEditSnapshot, setBuyInEditSnapshot] = useState<Record<string, number> | null>(null);
   const [buyInArrows, setBuyInArrows] = useState<Record<PlayerName, 'up' | 'down'>>({});
   const [buyInLog, setBuyInLog] = useState<BuyInLogEntry[]>([]);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (installPrompt) {
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+      setInstallPrompt(null);
+      return;
+    }
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone;
+    if (isStandalone) {
+      window.alert('이미 홈 화면에 추가되어 있습니다.');
+      return;
+    }
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (isIOS) {
+      window.alert('공유 버튼(⬆️)을 누른 뒤 "홈 화면에 추가"를 선택해주세요.');
+    } else {
+      window.alert('브라우저 메뉴에서 "홈 화면에 추가" 또는 "앱 설치"를 선택해주세요.');
+    }
+  };
 
   const requestCreateSession = (draft: { date: string; participantNames: PlayerName[] }) => {
     setPasswordModalConfig({
@@ -576,8 +612,16 @@ function AppShell() {
   return (
     <div className="tilt-shell">
       <main className="tilt-container page-enter pb-[480px] pt-6 sm:pt-9">
-        <header className="mb-8">
+        <header className="mb-8 flex items-center justify-between gap-3">
           <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
+          <button
+            type="button"
+            onClick={handleInstallClick}
+            className="tilt-button flex shrink-0 items-center gap-1.5 rounded-full border border-[#dfe1ee] bg-white px-3 py-2 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff]"
+            data-testid="button-install-shortcut"
+          >
+            <Download size={14} /> 바로가기 저장
+          </button>
         </header>
 
         {activeTab === 'game' && (
