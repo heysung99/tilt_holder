@@ -331,6 +331,17 @@ function AppShell() {
     setBuyInLog((current) => [...current, { time: new Date().toISOString(), name, delta, after }]);
   };
 
+  const addParticipantToSession = (name: PlayerName) => {
+    setSession((current) => (
+      current.participantNames.includes(name) ? current : {
+        ...current,
+        participantNames: [...current.participantNames, name],
+        buyIns: { ...current.buyIns, [name]: current.buyIns[name] ?? 0 },
+        finalAmounts: { ...current.finalAmounts, [name]: current.finalAmounts[name] ?? 0 },
+      }
+    ));
+  };
+
   const updateFinalAmount = (name: PlayerName, value: number) => {
     setSession((current) => ({
       ...current,
@@ -574,6 +585,7 @@ function AppShell() {
             onBuyInChange={updateBuyIn}
             onAddUser={addUser}
             onRenameUser={renameUser}
+            onAddParticipant={addParticipantToSession}
             isEditingBuyIns={isEditingBuyIns}
             buyInArrows={buyInArrows}
             buyInLog={buyInLog}
@@ -670,6 +682,7 @@ function GameScreen({
   onBuyInChange,
   onAddUser,
   onRenameUser,
+  onAddParticipant,
   isEditingBuyIns,
   buyInArrows,
   buyInLog,
@@ -684,6 +697,7 @@ function GameScreen({
   onBuyInChange: (name: PlayerName, delta: number) => void;
   onAddUser: (name: string) => boolean;
   onRenameUser: (currentName: PlayerName, nextName: string) => boolean;
+  onAddParticipant: (name: PlayerName) => void;
   isEditingBuyIns: boolean;
   buyInArrows: Record<PlayerName, 'up' | 'down'>;
   buyInLog: BuyInLogEntry[];
@@ -692,6 +706,7 @@ function GameScreen({
   onVerifyPassword: (title: string, onSuccess: () => void) => void;
 }) {
   const [showNewGame, setShowNewGame] = useState(false);
+  const [showAddParticipant, setShowAddParticipant] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [editingName, setEditingName] = useState<PlayerName | null>(null);
   const [editingValue, setEditingValue] = useState('');
@@ -766,7 +781,14 @@ function GameScreen({
               type="button"
               className="tilt-button rounded-full bg-[#2d3d8f] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#202e74]"
               data-testid="button-toggle-buy-in-edit"
-              onClick={isEditingBuyIns ? onFinishEditBuyIns : onStartEditBuyIns}
+              onClick={() => {
+                if (isEditingBuyIns) {
+                  setShowAddParticipant(false);
+                  onFinishEditBuyIns();
+                } else {
+                  onStartEditBuyIns();
+                }
+              }}
             >
               {isEditingBuyIns ? '완료' : '수정'}
             </button>
@@ -814,6 +836,41 @@ function GameScreen({
               );
             });
           })()}
+          {isEditingBuyIns ? (
+            showAddParticipant ? (
+              <div className="rounded-xl border border-[#dfe1ee] bg-white p-2">
+                {(() => {
+                  const availableUsers = users.filter((player) => !session.participantNames.includes(player.name));
+                  return availableUsers.length === 0 ? (
+                    <p className="px-2 py-1.5 text-xs text-[#858a9b]">추가할 유저가 없습니다.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 p-1">
+                      {availableUsers.map((player) => (
+                        <button
+                          key={player.name}
+                          type="button"
+                          className="tilt-button rounded-lg border border-[#e4e5ea] bg-white px-2.5 py-1.5 text-xs font-semibold text-[#2d3d8f] hover:bg-[#eef0ff]"
+                          data-testid={`button-add-participant-${player.name}`}
+                          onClick={() => { onAddParticipant(player.name); setShowAddParticipant(false); }}
+                        >
+                          {player.name}
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="tilt-button flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#c7cbe0] bg-white py-2.5 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff]"
+                data-testid="button-add-participant"
+                onClick={() => setShowAddParticipant(true)}
+              >
+                <UserPlus size={14} /> 참가자 추가
+              </button>
+            )
+          ) : null}
         </div>
         <button
           type="button"
@@ -907,22 +964,22 @@ function NewSessionForm({
         <div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">new session</p><h3 className="mt-1 text-lg font-bold text-[#20253a]">게임 세션 만들기</h3></div>
         <CalendarDays size={19} className="text-[#2d3d8f]" />
       </div>
-      <label className="text-xs font-semibold text-[#596078]">게임 날짜<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm text-[#20253a] outline-none focus:border-[#2d3d8f]" data-testid="input-session-date" /></label>
+      <label className="block text-xs font-semibold text-[#596078]">게임 날짜<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm text-[#20253a] outline-none focus:border-[#2d3d8f]" data-testid="input-session-date" /></label>
       <fieldset className="mt-4">
         <legend className="flex items-center gap-1.5 text-xs font-semibold text-[#596078]"><Crown size={13} className="text-[#2d3d8f]" /> 참가자 선택</legend>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+        <div className="mt-2 flex flex-wrap gap-2">
           {orderedUsers.map(({ player }) => {
             const selected = participantNames.includes(player.name);
             return (
               <button
                 key={player.name}
                 type="button"
-                className={`tilt-button flex w-full items-center gap-2 rounded-xl border p-3 text-left text-sm font-semibold ${selected ? 'border-[#bfc7f0] bg-[#eef0ff] text-[#2d3d8f]' : 'border-[#e4e5ea] bg-white text-[#858a9b]'}`}
+                className={`tilt-button inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold ${selected ? 'border-[#bfc7f0] bg-[#eef0ff] text-[#2d3d8f]' : 'border-[#e4e5ea] bg-white text-[#858a9b]'}`}
                 data-testid={`button-select-participant-${player.name}`}
                 onClick={() => toggleParticipant(player.name)}
               >
-                <span className="flex w-5 shrink-0 justify-center">{selected ? <Check size={14} /> : null}</span>
-                <span className="min-w-0 flex-1 truncate">{player.name}</span>
+                {selected ? <Check size={12} /> : null}
+                <span>{player.name}</span>
               </button>
             );
           })}
@@ -1158,7 +1215,7 @@ function RankingScreen({
               selectedSeason === 'ALL' ? 'bg-[#2d3d8f] text-white' : 'bg-[#f1f1ee] text-[#697087] hover:bg-[#e4e5ea]'
             }`}
           >
-            전체 시즌
+            전체
           </button>
           {availableYears.map((year) => (
             <button
@@ -1169,7 +1226,7 @@ function RankingScreen({
                 selectedSeason === year ? 'bg-[#2d3d8f] text-white' : 'bg-[#f1f1ee] text-[#697087] hover:bg-[#e4e5ea]'
               }`}
             >
-              {year} 시즌
+              {year.slice(-2)}시즌
             </button>
           ))}
         </div>
