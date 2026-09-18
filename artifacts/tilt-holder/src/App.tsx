@@ -1265,7 +1265,7 @@ function RankingScreen({
               }
 
               return (
-                <div className="p-3" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
+                <div className="px-3 py-1.5" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
                   <div className="grid grid-cols-[64px_160px_110px_80px_1fr] items-center gap-2 whitespace-nowrap">
                     <div className="flex items-center gap-1.5">
                       <span className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rank === 1 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>
@@ -1324,7 +1324,7 @@ function RankingScreen({
           <div className="overflow-x-auto">
             <div className="min-w-[650px] divide-y divide-[#ececf0]">
               {unrankedPlayers.map((stat, index) => (
-                <div className="p-3" key={stat.player.name} data-testid={`row-unranked-${stat.player.name}`}>
+                <div className="px-3 py-1.5" key={stat.player.name} data-testid={`row-unranked-${stat.player.name}`}>
                   <div className="grid grid-cols-[64px_160px_110px_80px_1fr] items-center gap-2 whitespace-nowrap">
                     <span className="mono flex h-7 w-7 items-center justify-center rounded-full bg-[#f1f1ee] text-xs font-bold text-[#858a9b]">
                       {String(index + 1).padStart(2, '0')}
@@ -1370,18 +1370,20 @@ function RankingScreen({
           {historyDates.slice().reverse().map((date) => <option key={date} value={date}>{date}</option>)}
         </select>
         <div className="tilt-card mt-3 divide-y divide-[#ececf0]">
-          {users.filter((player) => {
-            const record = historicalRecords.find((item) => item.name === player.name);
-            const value = selectedDateIndex >= 0 ? record?.values[selectedDateIndex] ?? null : null;
-            return value !== null;
-          }).map((player) => {
-            const record = historicalRecords.find((item) => item.name === player.name);
-            const value = selectedDateIndex >= 0 ? record?.values[selectedDateIndex] ?? null : null;
-            return <div key={player.name} className="flex items-center gap-3 px-4 py-3" data-testid={`row-date-result-${player.name}`}>
-              <span className="flex-1 text-sm font-semibold text-[#20253a]">{player.name}</span>
-              {value !== null ? <span className={`flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'} <span className="mono">{value > 0 ? '+' : ''}{value}</span></span> : null}
-            </div>;
-          })}
+          {users
+            .map((player) => {
+              const record = historicalRecords.find((item) => item.name === player.name);
+              const value = selectedDateIndex >= 0 ? record?.values[selectedDateIndex] ?? null : null;
+              return { player, value };
+            })
+            .filter((item): item is { player: Player; value: number } => item.value !== null)
+            .sort((a, b) => b.value - a.value)
+            .map(({ player, value }) => (
+              <div key={player.name} className="flex items-center gap-3 px-4 py-3" data-testid={`row-date-result-${player.name}`}>
+                <span className="flex-1 text-sm font-semibold text-[#20253a]">{player.name}</span>
+                <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'} <span className="mono">{value > 0 ? '+' : ''}{value}</span></span>
+              </div>
+            ))}
         </div>
       </section>
       <button type="button" className="tilt-button mt-6 flex w-full items-center justify-between rounded-[16px] border border-dashed border-[#d8d9df] px-4 py-3 text-left hover:bg-[#f8f8f4]" data-testid="button-ranking-rule" onClick={() => window.alert('빈칸은 미참여, 0을 포함한 음수는 패배로 계산했어요.')}>
@@ -1466,7 +1468,7 @@ function FundRow({ entry }: { entry: FundEntry }) {
 }
 
 function BottomNavigation({ activeTab, onTabChange }: { activeTab: TabKey; onTabChange: (tab: TabKey) => void }) {
-  return <nav className="tilt-nav fixed inset-x-0 bottom-0 z-20" aria-label="주요 메뉴"><div className="mx-auto grid max-w-[680px] grid-cols-4 px-4 pt-3"><div className="col-span-4 mb-2 flex justify-center"><span className="h-1 w-9 rounded-full bg-[#d9dae0]" /></div>{navItems.map(({ key, label, icon: Icon }) => <button key={key} type="button" data-active={activeTab === key} className={`tilt-nav-item flex min-h-[56px] flex-col items-center justify-center gap-1.5 text-[11px] font-semibold ${activeTab === key ? 'text-[#2d3d8f]' : 'text-[#9ba0ae]'}`} data-testid={`nav-${key}`} onClick={() => onTabChange(key)} aria-current={activeTab === key ? 'page' : undefined}><Icon size={20} strokeWidth={activeTab === key ? 2.5 : 1.8} /><span>{label}</span><span className="tilt-nav-dot" /></button>)}</div></nav>;
+  return <nav className="tilt-nav fixed inset-x-0 bottom-0 z-20" aria-label="주요 메뉴"><div className="mx-auto grid max-w-[680px] grid-cols-4 px-4 pt-3"><div className="col-span-4 mb-2 flex justify-center"><span className="h-1 w-9 rounded-full bg-[#d9dae0]" /></div>{navItems.map(({ key, label, icon: Icon }) => <button key={key} type="button" data-active={activeTab === key} className={`tilt-nav-item flex min-h-[60px] flex-col items-center justify-center gap-1.5 text-xs font-semibold ${activeTab === key ? 'text-[#2d3d8f]' : 'text-[#9ba0ae]'}`} data-testid={`nav-${key}`} onClick={() => onTabChange(key)} aria-current={activeTab === key ? 'page' : undefined}><Icon size={23} strokeWidth={activeTab === key ? 2.5 : 1.8} /><span>{label}</span><span className="tilt-nav-dot" /></button>)}</div></nav>;
 }
 
 function Router() {
@@ -1492,6 +1494,7 @@ function SettlementSummaryModal({
   onClose: () => void;
 }) {
   const sortedRows = [...settlementRows].sort((a, b) => b.result - a.result);
+  const finalTotal = grossFundContribution - expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
   const handleDownload = () => {
     downloadSettlementImage(session, settlementRows, expenses, grossFundContribution);
@@ -1561,6 +1564,10 @@ function SettlementSummaryModal({
                 ))}
               </div>
             )}
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-[#fafaf6] px-4 py-3">
+              <span className="text-base font-bold text-[#20253a]">최종 정산액</span>
+              <span className={`text-lg font-bold ${finalTotal >= 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>{formatSignedWon(finalTotal)}</span>
+            </div>
           </div>
         </div>
 
