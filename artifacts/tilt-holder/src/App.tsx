@@ -293,6 +293,10 @@ function AppShell() {
     setBuyInLog([]);
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
+    expenses.forEach((expense) => {
+      fetch(`/api/expenses/${encodeURIComponent(expense.id)}`, { method: 'DELETE' }).catch(console.error);
+    });
+    setExpenses([]);
     saveSessionToServer(newSession, {}, []);
     setActiveTab('game');
   };
