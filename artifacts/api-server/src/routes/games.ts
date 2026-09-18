@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, gamesTable } from "@workspace/db";
-import { desc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -10,7 +10,7 @@ router.get("/games", async (_req, res) => {
       res.json([]);
       return;
     }
-    const games = await db.select().from(gamesTable).orderBy(desc(gamesTable.id));
+    const games = await db.select().from(gamesTable).orderBy(asc(gamesTable.date));
     res.json(games);
   } catch (error) {
     console.error("Failed to fetch games:", error);

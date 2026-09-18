@@ -26,7 +26,7 @@ import {
   UserPlus,
   WalletCards,
 } from 'lucide-react';
-import { historyDates as initialHistoryDates, historicalRecords as initialHistoricalRecords, type HistoricalRecord } from '@/data/history';
+import { type HistoricalRecord } from '@/data/history';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 
@@ -84,7 +84,6 @@ const navItems: Array<{ key: TabKey; label: string; path: string; icon: typeof G
   { key: 'fund', label: '공금', path: '/fund', icon: WalletCards },
 ];
 
-const userNames = initialHistoricalRecords.map((record) => record.name);
 const avatarStyles = [
   ['bg-[#dce6ff]', 'text-[#334b98]'],
   ['bg-[#ffe0d7]', 'text-[#a44c3e]'],
@@ -94,12 +93,7 @@ const avatarStyles = [
   ['bg-[#f8e3bb]', 'text-[#9b6a1d]'],
 ];
 
-const initialPlayers: Player[] = userNames.map((name, index) => ({
-  name,
-  score: 0,
-  color: avatarStyles[index % avatarStyles.length][0],
-  text: avatarStyles[index % avatarStyles.length][1],
-}));
+const initialPlayers: Player[] = [];
 
 function formatWon(value: number) {
   return `${value.toLocaleString('ko-KR')}원`;
@@ -119,13 +113,13 @@ function makeAmountRecord(names: PlayerName[], amount: number) {
 }
 
 const initialSession: SessionState = {
-  date: '2026-09-11',
+  date: new Date().toISOString().slice(0, 10),
   gameName: '오늘의 게임',
-  participantNames: initialPlayers.slice(0, 4).map((player) => player.name),
-  buyIns: { 김형석: 1, 황성욱: 1, 채민수: 1, 최종탁: 1 },
-  finalAmounts: { 김형석: 80000, 황성욱: 50000, 채민수: 40000, 최종탁: 30000 },
-  hostName: '김형석',
-  bankName: '황성욱',
+  participantNames: [],
+  buyIns: {},
+  finalAmounts: {},
+  hostName: null,
+  bankName: null,
   isFinished: false,
   fundApplied: false,
 };
@@ -140,8 +134,8 @@ function AppShell() {
   const [session, setSession] = useState<SessionState>(initialSession);
   const [expenses, setExpenses] = useState<ExpenseEntry[]>(initialExpenses);
   const [fundEntries, setFundEntries] = useState<FundEntry[]>(initialFundEntries);
-  const [historyDates, setHistoryDates] = useState<string[]>(initialHistoryDates);
-  const [historicalRecords, setHistoricalRecords] = useState<HistoricalRecord[]>(initialHistoricalRecords);
+  const [historyDates, setHistoryDates] = useState<string[]>([]);
+  const [historicalRecords, setHistoricalRecords] = useState<HistoricalRecord[]>([]);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [passwordModalConfig, setPasswordModalConfig] = useState<PasswordModalConfig>(null);
 
@@ -202,14 +196,17 @@ function AppShell() {
                 const dateIndex = nextDates.indexOf(game.date);
                 const resultsMap = new Map(Object.entries(game.results || {}));
 
-                nextRecords.forEach((record) => {
+                resultsMap.forEach((value, name) => {
+                  let record = nextRecords.find((r) => r.name === name);
+                  if (!record) {
+                    record = { name, values: [] };
+                    nextRecords.push(record);
+                  }
                   const values = [...record.values];
                   while (values.length <= dateIndex) {
                     values.push(null);
                   }
-                  if (resultsMap.has(record.name)) {
-                    values[dateIndex] = resultsMap.get(record.name) ?? null;
-                  }
+                  values[dateIndex] = value;
                   record.values = values;
                 });
               });
