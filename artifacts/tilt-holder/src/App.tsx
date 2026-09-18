@@ -53,6 +53,13 @@ type SessionState = {
   fundApplied: boolean;
 };
 
+type BuyInLogEntry = {
+  time: string;
+  name: PlayerName;
+  delta: number;
+  after: number;
+};
+
 type ExpenseEntry = {
   id: string;
   title: string;
@@ -140,6 +147,7 @@ function AppShell() {
   const [isEditingBuyIns, setIsEditingBuyIns] = useState(false);
   const [buyInEditSnapshot, setBuyInEditSnapshot] = useState<Record<string, number> | null>(null);
   const [buyInArrows, setBuyInArrows] = useState<Record<PlayerName, 'up' | 'down'>>({});
+  const [buyInLog, setBuyInLog] = useState<BuyInLogEntry[]>([]);
 
   const requestCreateSession = (draft: { date: string; participantNames: PlayerName[] }) => {
     setPasswordModalConfig({
@@ -197,6 +205,7 @@ function AppShell() {
             fundApplied: serverSession.fundApplied,
           });
           setBuyInArrows(serverSession.buyInArrows ?? {});
+          setBuyInLog(serverSession.buyInLog ?? []);
         }
         if (Array.isArray(serverGames) && serverGames.length > 0) {
           setHistoryDates((currentDates) => {
@@ -257,11 +266,11 @@ function AppShell() {
   const totalFinalChips = settlementRows.reduce((total, row) => total + row.finalAmount, 0);
   const fundBalance = fundEntries.reduce((total, entry) => total + entry.amount, 0);
 
-  const saveSessionToServer = (sessionToSave: SessionState, arrowsToSave: Record<PlayerName, 'up' | 'down'>) => {
+  const saveSessionToServer = (sessionToSave: SessionState, arrowsToSave: Record<PlayerName, 'up' | 'down'>, logToSave: BuyInLogEntry[]) => {
     fetch('/api/session', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...sessionToSave, buyInArrows: arrowsToSave }),
+      body: JSON.stringify({ ...sessionToSave, buyInArrows: arrowsToSave, buyInLog: logToSave }),
     }).catch((err) => {
       console.error('Failed to save session to server database:', err);
     });
@@ -281,9 +290,10 @@ function AppShell() {
     };
     setSession(newSession);
     setBuyInArrows({});
+    setBuyInLog([]);
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
-    saveSessionToServer(newSession, {});
+    saveSessionToServer(newSession, {}, []);
     setActiveTab('game');
   };
 
@@ -306,10 +316,11 @@ function AppShell() {
     setBuyInArrows(arrows);
     setBuyInEditSnapshot(null);
     setIsEditingBuyIns(false);
-    saveSessionToServer(session, arrows);
+    saveSessionToServer(session, arrows, buyInLog);
   };
 
   const updateBuyIn = (name: PlayerName, delta: number) => {
+    const after = (session.buyIns[name] ?? 0) + delta;
     setSession((current) => ({
       ...current,
       buyIns: {
@@ -317,6 +328,7 @@ function AppShell() {
         [name]: (current.buyIns[name] ?? 0) + delta,
       },
     }));
+    setBuyInLog((current) => [...current, { time: new Date().toISOString(), name, delta, after }]);
   };
 
   const updateFinalAmount = (name: PlayerName, value: number) => {
@@ -477,7 +489,7 @@ function AppShell() {
     if (grossFundContribution !== 0) {
       const fundItem = {
         id: `game-${session.date}-${Date.now()}`,
-        title: `${session.date} 정산 공금`,
+        title: '기부액(딴 돈의 절반)',
         meta: `${formatSessionDate(session.date)} · 손실금 - 지급액`,
         amount: grossFundContribution,
       };
@@ -493,6 +505,7 @@ function AppShell() {
     }
     setSession((current) => ({ ...current, isFinished: true, fundApplied: true }));
     setBuyInArrows({});
+    setBuyInLog([]);
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
     fetch('/api/session', { method: 'DELETE' }).catch((err) => {
@@ -563,6 +576,7 @@ function AppShell() {
             onRenameUser={renameUser}
             isEditingBuyIns={isEditingBuyIns}
             buyInArrows={buyInArrows}
+            buyInLog={buyInLog}
             onStartEditBuyIns={startEditingBuyIns}
             onFinishEditBuyIns={finishEditingBuyIns}
             onVerifyPassword={verifyPassword}
@@ -573,10 +587,8 @@ function AppShell() {
             session={session}
             expenses={expenses}
             settlementRows={settlementRows}
-            grossFundContribution={grossFundContribution}
             finalFundAmount={finalFundAmount}
             totalPayout={totalPayout}
-            fundBalance={fundBalance}
             totalBuyIns={totalBuyIns}
             totalFinalChips={totalFinalChips}
             onFinalAmountChange={updateFinalAmount}
@@ -609,6 +621,7 @@ function AppShell() {
           session={session}
           settlementRows={settlementRows}
           expenses={expenses}
+          grossFundContribution={grossFundContribution}
           onClose={() => setShowSettlementModal(false)}
         />
       ) : null}
@@ -659,6 +672,7 @@ function GameScreen({
   onRenameUser,
   isEditingBuyIns,
   buyInArrows,
+  buyInLog,
   onStartEditBuyIns,
   onFinishEditBuyIns,
   onVerifyPassword,
@@ -672,6 +686,7 @@ function GameScreen({
   onRenameUser: (currentName: PlayerName, nextName: string) => boolean;
   isEditingBuyIns: boolean;
   buyInArrows: Record<PlayerName, 'up' | 'down'>;
+  buyInLog: BuyInLogEntry[];
   onStartEditBuyIns: () => void;
   onFinishEditBuyIns: () => void;
   onVerifyPassword: (title: string, onSuccess: () => void) => void;
@@ -680,6 +695,7 @@ function GameScreen({
   const [isAdmin, setIsAdmin] = useState(false);
   const [editingName, setEditingName] = useState<PlayerName | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [showBuyInLog, setShowBuyInLog] = useState(false);
 
   const isSessionInProgress = session.participantNames.length > 0 && !session.fundApplied;
   const rankMap = overallRanking(users, historicalRecords);
@@ -742,7 +758,7 @@ function GameScreen({
         <div className="mb-3 flex items-center justify-between">
           <div>
             <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">live buy-in</p>
-            <h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">바이인 횟수 기록</h3>
+            <h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">바이인 현황</h3>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#2d3d8f]">1회 = 50,000원</span>
@@ -757,10 +773,12 @@ function GameScreen({
           </div>
         </div>
         <div className="space-y-2">
-          {users
-            .filter((player) => session.participantNames.includes(player.name))
-            .sort((a, b) => (session.buyIns[a.name] ?? 0) - (session.buyIns[b.name] ?? 0))
-            .map((player) => {
+          {(() => {
+            const participants = users.filter((player) => session.participantNames.includes(player.name));
+            const displayedPlayers = isEditingBuyIns
+              ? participants
+              : [...participants].sort((a, b) => (session.buyIns[a.name] ?? 0) - (session.buyIns[b.name] ?? 0));
+            return displayedPlayers.map((player) => {
               const arrow = buyInArrows[player.name];
               const ranked = rankMap.get(player.name);
               return (
@@ -768,24 +786,25 @@ function GameScreen({
                   <span className="mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f1f1ee] text-xs font-bold text-[#858a9b]">
                     {ranked ? String(ranked.rank).padStart(2, '0') : '-'}
                   </span>
-                  <div className="flex min-w-0 flex-1 items-center gap-1">
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
                     <span className="truncate text-base font-bold text-[#20253a]">{player.name}</span>
-                    {arrow ? (
-                      <Triangle
-                        size={12}
-                        className={arrow === 'up' ? 'rotate-0 text-[#d1453b]' : 'rotate-180 text-[#1f9d5a]'}
-                        fill="currentColor"
-                        data-testid={`arrow-buy-in-${player.name}`}
-                      />
+                    {ranked ? (
+                      <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${ranked.tier.className}`}>
+                        <span>{ranked.tier.icon}</span>
+                        <span>{ranked.tier.label}</span>
+                      </span>
                     ) : null}
                   </div>
-                  {ranked ? (
-                    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${ranked.tier.className}`}>
-                      <span>{ranked.tier.icon}</span>
-                    </span>
-                  ) : null}
                   {isEditingBuyIns ? (
                     <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg border border-[#dfe1ee] text-[#2d3d8f] hover:bg-[#eef0ff]" aria-label={`${player.name} 바이인 1회 줄이기`} data-testid={`button-buy-in-minus-${player.name}`} onClick={() => onBuyInChange(player.name, -1)}><Minus size={15} /></button>
+                  ) : null}
+                  {arrow ? (
+                    <Triangle
+                      size={12}
+                      className={arrow === 'up' ? 'rotate-0 text-[#d1453b]' : 'rotate-180 text-[#1f9d5a]'}
+                      fill="currentColor"
+                      data-testid={`arrow-buy-in-${player.name}`}
+                    />
                   ) : null}
                   <span className="mono min-w-10 text-center text-base font-bold text-[#20253a]" data-testid={`count-buy-in-${player.name}`}>{session.buyIns[player.name] ?? 0}</span>
                   {isEditingBuyIns ? (
@@ -793,9 +812,52 @@ function GameScreen({
                   ) : null}
                 </div>
               );
-            })}
+            });
+          })()}
         </div>
+        <button
+          type="button"
+          className="tilt-button mt-3 flex w-full items-center justify-center rounded-xl border border-[#dfe1ee] bg-white py-2.5 text-xs font-bold text-[#2d3d8f]"
+          data-testid="button-buy-in-log"
+          onClick={() => setShowBuyInLog(true)}
+        >
+          바이인 Log
+        </button>
       </section>
+
+      {showBuyInLog ? <BuyInLogModal log={buyInLog} onClose={() => setShowBuyInLog(false)} /> : null}
+    </div>
+  );
+}
+
+function BuyInLogModal({ log, onClose }: { log: BuyInLogEntry[]; onClose: () => void }) {
+  const formatTime = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+      <div className="rise-in flex max-h-[80vh] w-full max-w-[420px] flex-col rounded-[24px] bg-white p-6 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#ececf0] pb-4">
+          <h3 className="text-lg font-bold text-[#20253a]">바이인 Log</h3>
+          <button type="button" onClick={onClose} className="rounded-full bg-[#f1f1ee] px-3 py-1 text-xs font-bold text-[#697087]">닫기</button>
+        </div>
+        <div className="mt-4 flex-1 space-y-2 overflow-y-auto text-xs">
+          {log.length === 0 ? (
+            <p className="text-[#858a9b]">기록된 변경 내역이 없습니다.</p>
+          ) : (
+            log.map((entry, index) => (
+              <div key={index} className="flex items-center justify-between rounded-lg bg-[#fafaf6] px-3 py-2">
+                <span className="mono text-[#858a9b]">{formatTime(entry.time)}</span>
+                <span className="font-bold text-[#20253a]">{entry.name}</span>
+                <span className={`font-bold ${entry.delta > 0 ? 'text-[#d1453b]' : 'text-[#1f9d5a]'}`}>{entry.delta > 0 ? '+1' : '-1'}</span>
+                <span className="mono text-[#697087]">→ {entry.after}회</span>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -885,10 +947,8 @@ function SettleScreen({
   session,
   expenses,
   settlementRows,
-  grossFundContribution,
   finalFundAmount,
   totalPayout,
-  fundBalance,
   totalBuyIns,
   totalFinalChips,
   onFinalAmountChange,
@@ -898,10 +958,8 @@ function SettleScreen({
   session: SessionState;
   expenses: ExpenseEntry[];
   settlementRows: SettlementRow[];
-  grossFundContribution: number;
   finalFundAmount: number;
   totalPayout: number;
-  fundBalance: number;
   totalBuyIns: number;
   totalFinalChips: number;
   onFinalAmountChange: (name: PlayerName, value: number) => void;
@@ -912,7 +970,6 @@ function SettleScreen({
   const [settled, setSettled] = useState<string[]>(() => expenses.filter((e: ExpenseEntry & { settled?: boolean }) => e.settled).map((e) => e.id));
   const [newExpense, setNewExpense] = useState({ title: '', amount: '' });
   const expenseTotal = expenses.reduce((total, expense) => total + expense.amount, 0);
-  const projectedFundBalance = session.fundApplied ? fundBalance : fundBalance + grossFundContribution;
 
   const markSettled = (id: string) => {
     setSettled((current) => {
@@ -929,16 +986,7 @@ function SettleScreen({
 
   return (
     <div>
-      <section className="rise-in delay-1 tilt-card bg-[#e9ef76] p-5 sm:p-7" data-testid="card-settlement-summary">
-        <div className="flex items-end justify-between">
-          <div><p className="text-xs text-[#596313]">{settlementRows.length}명이 참여</p><p className="mt-1 text-sm font-bold text-[#20253a]">바이인 {formatWon(totalBuyIns)}</p></div>
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-2 border-t border-[#cfd66c] pt-4">
-          <div><p className="text-xs text-[#596313]">오늘 최종 공금액</p><p className="mono mt-1 text-lg font-bold text-[#20253a]">{formatSignedWon(finalFundAmount)}</p></div>
-          <div className="text-right"><p className="text-xs text-[#596313]">종료 후 공금 잔액</p><p className="mono mt-1 text-lg font-bold text-[#20253a]">{formatWon(projectedFundBalance)}</p></div>
-        </div>
-      </section>
-      <div className="rise-in delay-2 mt-7">
+      <div className="rise-in delay-2 mt-1">
         <div className="mb-3 flex items-center justify-between"><div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">payout calculator</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">플레이어별 정산</h3></div><span className="text-xs text-[#858a9b]">최종 금액 입력</span></div>
         <div className="tilt-card divide-y divide-[#ececf0]">
           {settlementRows.map((row) => (
@@ -980,7 +1028,7 @@ function SettleScreen({
       </div>
       <section className="rise-in delay-4 mt-8 rounded-[18px] border border-[#d8d9df] bg-white p-4" data-testid="card-fund-final-preview">
         <div className="flex items-start gap-3"><div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#eef3c5] text-[#657117]"><Landmark size={17} /></div><div className="flex-1"><p className="text-sm font-bold text-[#20253a]">최종 공금액 계산</p><p className="mt-1 text-xs leading-5 text-[#697087]">손실금 {formatWon(settlementRows.reduce((total, row) => total + (row.actualSettlement < 0 ? Math.abs(row.actualSettlement) : 0), 0))} - 지급액 {formatWon(totalPayout)} - 지출 {formatWon(expenseTotal)}</p></div><p className="mono text-lg font-bold text-[#20253a]">{formatSignedWon(finalFundAmount)}</p></div>
-        <div className="mt-3 flex items-center justify-between rounded-xl bg-[#fafaf6] px-3 py-2 text-xs"><span className="text-[#697087]">칩 합계 검증</span><span className={totalBuyIns === totalFinalChips ? 'font-bold text-[#657117]' : 'font-bold text-[#bd604d]'}>{formatWon(totalFinalChips)} / {formatWon(totalBuyIns)} {totalBuyIns === totalFinalChips ? '일치' : '불일치'}</span></div>
+        <div className="mt-3 flex items-center justify-between rounded-xl bg-[#fafaf6] px-3 py-3 text-sm"><span className="font-bold text-[#697087]">칩 합계 검증 (칩/바이인)</span><span className={totalBuyIns === totalFinalChips ? 'font-bold text-[#657117]' : 'font-bold text-[#bd604d]'}>{formatWon(totalFinalChips)} / {formatWon(totalBuyIns)} {totalBuyIns === totalFinalChips ? '일치' : '불일치'}</span></div>
         <button type="button" className="tilt-button mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#2d3d8f] px-4 py-3 text-xs font-bold text-white hover:bg-[#202e74] disabled:cursor-not-allowed disabled:opacity-50" data-testid="button-settle-session" onClick={onFinishSession} disabled={session.fundApplied}><Check size={15} />{session.fundApplied ? '정산 완료' : '정산하기'}</button>
       </section>
     </div>
@@ -1377,17 +1425,19 @@ function SettlementSummaryModal({
   session,
   settlementRows,
   expenses,
+  grossFundContribution,
   onClose,
 }: {
   session: SessionState;
   settlementRows: SettlementRow[];
   expenses: ExpenseEntry[];
+  grossFundContribution: number;
   onClose: () => void;
 }) {
   const sortedRows = [...settlementRows].sort((a, b) => b.result - a.result);
 
   const handleDownload = () => {
-    downloadSettlementImage(session, settlementRows, expenses);
+    downloadSettlementImage(session, settlementRows, expenses, grossFundContribution);
   };
 
   return (
@@ -1403,26 +1453,29 @@ function SettlementSummaryModal({
 
         <div className="mt-5 space-y-4">
           <div className="rounded-2xl bg-[#eef0ff] p-4">
-            <p className="text-xs font-bold text-[#2d3d8f]">정산 날짜: {session.date}</p>
+            <p className="text-sm font-bold text-[#2d3d8f]">정산 날짜: {session.date}</p>
           </div>
 
           <div>
-            <h4 className="mb-2 text-sm font-bold text-[#20253a]">🏆 순위별 결과</h4>
+            <h4 className="mb-2 text-base font-bold text-[#20253a]">🏆 순위별 결과</h4>
             <div className="divide-y divide-[#ececf0] rounded-xl border border-[#ececf0] bg-white">
               {sortedRows.map((row, idx) => {
                 const buyInCount = Math.round(row.buyInTotal / 50000);
                 return (
-                  <div key={row.name} className="flex items-center justify-between p-3 text-xs sm:text-sm">
+                  <div key={row.name} className="flex items-center justify-between p-4 text-sm sm:text-base">
                     <div className="flex items-center gap-3">
                       <span className="mono font-bold text-[#2d3d8f]">{idx + 1}위</span>
                       <span className="font-bold text-[#20253a]">{row.name}</span>
                     </div>
                     <div className="text-right">
                       <p className={`font-bold ${row.result >= 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`}>
-                        NET {formatSignedWon(row.result)}
+                        {formatSignedWon(row.result)}
                       </p>
-                      <p className="text-[11px] text-[#697087]">
-                        바이인 {buyInCount}회 · 남은칩 {formatWon(row.finalAmount)} · 정산 {formatSignedWon(row.actualSettlement)}
+                      <p className="mt-1 text-xs text-[#697087]">
+                        바이인 {buyInCount}회 · 남은칩 {formatWon(row.finalAmount)}
+                      </p>
+                      <p className={`mt-1 font-bold ${row.actualSettlement >= 0 ? 'text-[#2d3d8f]' : 'text-[#dc2626]'}`}>
+                        인당 정산금액 {formatSignedWon(row.actualSettlement)}
                       </p>
                     </div>
                   </div>
@@ -1432,13 +1485,19 @@ function SettlementSummaryModal({
           </div>
 
           <div>
-            <h4 className="mb-2 text-sm font-bold text-[#20253a]">💳 당일 공금 지출 내역</h4>
-            {expenses.length === 0 ? (
-              <p className="text-xs text-[#858a9b]">지출 내역이 없습니다.</p>
+            <h4 className="mb-2 text-base font-bold text-[#20253a]">💳 당일 공금 지출 내역</h4>
+            {expenses.length === 0 && grossFundContribution <= 0 ? (
+              <p className="text-sm text-[#858a9b]">지출 내역이 없습니다.</p>
             ) : (
               <div className="divide-y divide-[#ececf0] rounded-xl border border-[#ececf0] bg-white">
+                {grossFundContribution > 0 ? (
+                  <div className="flex items-center justify-between p-4 text-sm">
+                    <span className="font-bold text-[#20253a]">기부액(딴 돈의 절반)</span>
+                    <span className="font-bold text-[#16a34a]">+{formatWon(grossFundContribution)}</span>
+                  </div>
+                ) : null}
                 {expenses.map((exp) => (
-                  <div key={exp.id} className="flex items-center justify-between p-3 text-xs">
+                  <div key={exp.id} className="flex items-center justify-between p-4 text-sm">
                     <span className="font-bold text-[#20253a]">{exp.title}</span>
                     <span className="font-bold text-[#bd604d]">-{formatWon(exp.amount)}</span>
                   </div>
@@ -1469,7 +1528,7 @@ function SettlementSummaryModal({
   );
 }
 
-function downloadSettlementImage(session: SessionState, settlementRows: SettlementRow[], expenses: ExpenseEntry[]) {
+function downloadSettlementImage(session: SessionState, settlementRows: SettlementRow[], expenses: ExpenseEntry[], grossFundContribution: number) {
   const canvas = document.createElement('canvas');
   canvas.width = 800;
   canvas.height = 1100;
@@ -1507,7 +1566,7 @@ function downloadSettlementImage(session: SessionState, settlementRows: Settleme
   ctx.fillStyle = '#2d3d8f';
   ctx.font = 'bold 13px sans-serif';
   ctx.fillText('순위 / 이름', 60, y + 23);
-  ctx.fillText('총 NET 금액', 260, y + 23);
+  ctx.fillText('총 금액', 260, y + 23);
   ctx.fillText('바이인', 410, y + 23);
   ctx.fillText('남은 칩', 520, y + 23);
   ctx.fillText('정산 결과', 640, y + 23);
@@ -1545,11 +1604,21 @@ function downloadSettlementImage(session: SessionState, settlementRows: Settleme
   ctx.fillText('💳 당일 사용 공금 지출 내역', 40, y);
   y += 35;
 
-  if (expenses.length === 0) {
+  if (expenses.length === 0 && grossFundContribution <= 0) {
     ctx.fillStyle = '#697087';
     ctx.font = '14px sans-serif';
     ctx.fillText('지출 내역이 없습니다.', 40, y);
   } else {
+    if (grossFundContribution > 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(40, y, 720, 36);
+      ctx.fillStyle = '#20253a';
+      ctx.font = '14px sans-serif';
+      ctx.fillText('기부액(딴 돈의 절반)', 60, y + 23);
+      ctx.fillStyle = '#16a34a';
+      ctx.fillText(`+${grossFundContribution.toLocaleString()}원`, 520, y + 23);
+      y += 42;
+    }
     expenses.forEach((exp) => {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(40, y, 720, 36);
