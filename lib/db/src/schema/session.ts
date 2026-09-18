@@ -8,6 +8,7 @@ export const currentSessionTable = pgTable("current_session", {
   participantNames: jsonb("participant_names").notNull(),
   buyIns: jsonb("buy_ins").notNull(),
   finalAmounts: jsonb("final_amounts").notNull(),
+  buyInArrows: jsonb("buy_in_arrows").notNull().default({}),
   hostName: text("host_name"),
   bankName: text("bank_name"),
   isFinished: boolean("is_finished").notNull().default(false),

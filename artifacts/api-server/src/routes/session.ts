@@ -24,7 +24,7 @@ router.get("/session", async (_req, res) => {
 
 router.put("/session", async (req, res) => {
   try {
-    const { date, gameName, participantNames, buyIns, finalAmounts, hostName, bankName, isFinished, fundApplied } = req.body;
+    const { date, gameName, participantNames, buyIns, finalAmounts, buyInArrows, hostName, bankName, isFinished, fundApplied } = req.body;
     if (!date || !gameName || !participantNames || !buyIns || !finalAmounts) {
       res.status(400).json({ error: "Missing required fields" });
       return;
@@ -42,6 +42,7 @@ router.put("/session", async (req, res) => {
       participantNames,
       buyIns,
       finalAmounts,
+      buyInArrows: buyInArrows ?? {},
       hostName: hostName ?? null,
       bankName: bankName ?? null,
       isFinished: isFinished ?? false,
