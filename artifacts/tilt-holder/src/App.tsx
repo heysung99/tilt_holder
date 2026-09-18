@@ -23,6 +23,7 @@ import {
   ReceiptText,
   RotateCcw,
   Trophy,
+  Triangle,
   UserPlus,
   WalletCards,
 } from 'lucide-react';
@@ -138,6 +139,9 @@ function AppShell() {
   const [historicalRecords, setHistoricalRecords] = useState<HistoricalRecord[]>([]);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [passwordModalConfig, setPasswordModalConfig] = useState<PasswordModalConfig>(null);
+  const [isEditingBuyIns, setIsEditingBuyIns] = useState(false);
+  const [buyInEditSnapshot, setBuyInEditSnapshot] = useState<Record<string, number> | null>(null);
+  const [buyInArrows, setBuyInArrows] = useState<Record<PlayerName, 'up' | 'down'>>({});
 
   const requestCreateSession = (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => {
     setPasswordModalConfig({
@@ -170,8 +174,9 @@ function AppShell() {
       fetch('/api/expenses').then((r) => (r.ok ? r.json() : [])),
       fetch('/api/fund').then((r) => (r.ok ? r.json() : [])),
       fetch('/api/games').then((r) => (r.ok ? r.json() : [])),
+      fetch('/api/session').then((r) => (r.ok ? r.json() : null)),
     ])
-      .then(([serverUsers, serverExpenses, serverFund, serverGames]) => {
+      .then(([serverUsers, serverExpenses, serverFund, serverGames, serverSession]) => {
         if (Array.isArray(serverUsers) && serverUsers.length > 0) {
           setUsers(serverUsers);
         }
@@ -180,6 +185,19 @@ function AppShell() {
         }
         if (Array.isArray(serverFund)) {
           setFundEntries(serverFund);
+        }
+        if (serverSession && !serverSession.fundApplied) {
+          setSession({
+            date: serverSession.date,
+            gameName: serverSession.gameName,
+            participantNames: serverSession.participantNames,
+            buyIns: serverSession.buyIns,
+            finalAmounts: serverSession.finalAmounts,
+            hostName: serverSession.hostName,
+            bankName: serverSession.bankName,
+            isFinished: serverSession.isFinished,
+            fundApplied: serverSession.fundApplied,
+          });
         }
         if (Array.isArray(serverGames) && serverGames.length > 0) {
           setHistoryDates((currentDates) => {
@@ -240,15 +258,52 @@ function AppShell() {
   const totalFinalChips = settlementRows.reduce((total, row) => total + row.finalAmount, 0);
   const fundBalance = fundEntries.reduce((total, entry) => total + entry.amount, 0);
 
+  const saveSessionToServer = (sessionToSave: SessionState) => {
+    fetch('/api/session', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sessionToSave),
+    }).catch((err) => {
+      console.error('Failed to save session to server database:', err);
+    });
+  };
+
   const createSession = (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => {
-    setSession({
+    const newSession: SessionState = {
       ...draft,
       buyIns: makeAmountRecord(draft.participantNames, 1),
       finalAmounts: makeAmountRecord(draft.participantNames, 0),
       isFinished: false,
       fundApplied: false,
-    });
+    };
+    setSession(newSession);
+    setBuyInArrows({});
+    setIsEditingBuyIns(false);
+    setBuyInEditSnapshot(null);
+    saveSessionToServer(newSession);
     setActiveTab('game');
+  };
+
+  const startEditingBuyIns = () => {
+    setBuyInEditSnapshot({ ...session.buyIns });
+    setBuyInArrows({});
+    setIsEditingBuyIns(true);
+  };
+
+  const finishEditingBuyIns = () => {
+    const arrows: Record<PlayerName, 'up' | 'down'> = {};
+    if (buyInEditSnapshot) {
+      session.participantNames.forEach((name) => {
+        const before = buyInEditSnapshot[name] ?? 0;
+        const after = session.buyIns[name] ?? 0;
+        if (after > before) arrows[name] = 'up';
+        else if (after < before) arrows[name] = 'down';
+      });
+    }
+    setBuyInArrows(arrows);
+    setBuyInEditSnapshot(null);
+    setIsEditingBuyIns(false);
+    saveSessionToServer(session);
   };
 
   const updateBuyIn = (name: PlayerName, delta: number) => {
@@ -434,6 +489,12 @@ function AppShell() {
       });
     }
     setSession((current) => ({ ...current, isFinished: true, fundApplied: true }));
+    setBuyInArrows({});
+    setIsEditingBuyIns(false);
+    setBuyInEditSnapshot(null);
+    fetch('/api/session', { method: 'DELETE' }).catch((err) => {
+      console.error('Failed to clear session from server database:', err);
+    });
   };
 
   const deleteHistoryDate = (dateToDelete: string) => {
@@ -497,6 +558,10 @@ function AppShell() {
             onBuyInChange={updateBuyIn}
             onAddUser={addUser}
             onRenameUser={renameUser}
+            isEditingBuyIns={isEditingBuyIns}
+            buyInArrows={buyInArrows}
+            onStartEditBuyIns={startEditingBuyIns}
+            onFinishEditBuyIns={finishEditingBuyIns}
           />
         )}
         {activeTab === 'settle' && (
@@ -570,6 +635,10 @@ function GameScreen({
   onBuyInChange,
   onAddUser,
   onRenameUser,
+  isEditingBuyIns,
+  buyInArrows,
+  onStartEditBuyIns,
+  onFinishEditBuyIns,
 }: {
   session: SessionState;
   users: Player[];
@@ -578,9 +647,23 @@ function GameScreen({
   onBuyInChange: (name: PlayerName, delta: number) => void;
   onAddUser: (name: string) => boolean;
   onRenameUser: (currentName: PlayerName, nextName: string) => boolean;
+  isEditingBuyIns: boolean;
+  buyInArrows: Record<PlayerName, 'up' | 'down'>;
+  onStartEditBuyIns: () => void;
+  onFinishEditBuyIns: () => void;
 }) {
   const [showHistory, setShowHistory] = useState(false);
   const [showNewGame, setShowNewGame] = useState(false);
+
+  const isSessionInProgress = session.participantNames.length > 0 && !session.fundApplied;
+
+  const toggleNewGameForm = () => {
+    if (!showNewGame && isSessionInProgress) {
+      const proceed = window.confirm('진행중인 게임이 있습니다. 새 게임을 만들 경우 바이인 기록이 날아갑니다. 그래도 진행하시겠습니까?');
+      if (!proceed) return;
+    }
+    setShowNewGame((current) => !current);
+  };
 
   return (
     <div>
@@ -588,7 +671,7 @@ function GameScreen({
         type="button"
         className="tilt-button rise-in mb-6 flex w-full items-center justify-between rounded-[18px] bg-[#2d3d8f] px-5 py-4 text-left text-white shadow-[0_12px_28px_rgba(45,61,143,.18)] hover:bg-[#202e74]"
         data-testid="button-open-game"
-        onClick={() => setShowNewGame((current) => !current)}
+        onClick={toggleNewGameForm}
       >
         <span><span className="mono block text-[10px] font-bold uppercase tracking-[0.16em] text-[#cbd1f2]">new game</span><span className="mt-1 block text-lg font-bold">게임 개설</span></span>
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e9ef76] text-[#2d3d8f]"><CirclePlus size={20} /></span>
@@ -601,22 +684,47 @@ function GameScreen({
             <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">live buy-in</p>
             <h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">바이인 횟수 기록</h3>
           </div>
-          <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#2d3d8f]">1회 = 50,000원</span>
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-bold text-[#2d3d8f]">1회 = 50,000원</span>
+            <button
+              type="button"
+              className="tilt-button rounded-full bg-[#2d3d8f] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#202e74]"
+              data-testid="button-toggle-buy-in-edit"
+              onClick={isEditingBuyIns ? onFinishEditBuyIns : onStartEditBuyIns}
+            >
+              {isEditingBuyIns ? '완료' : '수정'}
+            </button>
+          </div>
         </div>
         <div className="space-y-2">
-          {users.filter((player) => session.participantNames.includes(player.name)).map((player) => (
-            <div key={player.name} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5">
-              <span className="flex-1 text-sm font-bold text-[#20253a]">{player.name}</span>
-              <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg border border-[#dfe1ee] text-[#2d3d8f] hover:bg-[#eef0ff]" aria-label={`${player.name} 바이인 1회 줄이기`} data-testid={`button-buy-in-minus-${player.name}`} onClick={() => onBuyInChange(player.name, -1)}><Minus size={15} /></button>
-              <span className="mono min-w-10 text-center text-sm font-bold text-[#20253a]" data-testid={`count-buy-in-${player.name}`}>{session.buyIns[player.name] ?? 0}</span>
-              <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg bg-[#2d3d8f] text-white hover:bg-[#202e74]" aria-label={`${player.name} 바이인 1회 추가`} data-testid={`button-buy-in-plus-${player.name}`} onClick={() => onBuyInChange(player.name, 1)}><Plus size={15} /></button>
-            </div>
-          ))}
+          {users.filter((player) => session.participantNames.includes(player.name)).map((player) => {
+            const arrow = buyInArrows[player.name];
+            return (
+              <div key={player.name} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5">
+                <span className="flex-1 text-sm font-bold text-[#20253a]">{player.name}</span>
+                {isEditingBuyIns ? (
+                  <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg border border-[#dfe1ee] text-[#2d3d8f] hover:bg-[#eef0ff]" aria-label={`${player.name} 바이인 1회 줄이기`} data-testid={`button-buy-in-minus-${player.name}`} onClick={() => onBuyInChange(player.name, -1)}><Minus size={15} /></button>
+                ) : null}
+                <span className="mono min-w-10 text-center text-sm font-bold text-[#20253a]" data-testid={`count-buy-in-${player.name}`}>{session.buyIns[player.name] ?? 0}</span>
+                {arrow ? (
+                  <Triangle
+                    size={12}
+                    className={arrow === 'up' ? 'rotate-0 text-[#d1453b]' : 'rotate-180 text-[#1f9d5a]'}
+                    fill="currentColor"
+                    data-testid={`arrow-buy-in-${player.name}`}
+                  />
+                ) : null}
+                {isEditingBuyIns ? (
+                  <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg bg-[#2d3d8f] text-white hover:bg-[#202e74]" aria-label={`${player.name} 바이인 1회 추가`} data-testid={`button-buy-in-plus-${player.name}`} onClick={() => onBuyInChange(player.name, 1)}><Plus size={15} /></button>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </section>
 
       <section className="rise-in delay-2 mt-6 grid grid-cols-2 gap-3">
-        <button type="button" className="tilt-button tilt-card flex min-h-[126px] flex-col justify-between p-4 text-left hover:border-[#bfc7f0]" data-testid="button-new-game" onClick={() => setShowNewGame((current) => !current)}>
+        <button type="button" className="tilt-button tilt-card flex min-h-[126px] flex-col justify-between p-4 text-left hover:border-[#bfc7f0]" data-testid="button-new-game" onClick={toggleNewGameForm}>
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eef0ff] text-[#2d3d8f]"><CirclePlus size={19} /></span>
           <span><span className="block text-sm font-bold text-[#20253a]">새 세션</span><span className="mt-1 block text-xs text-[#697087]">날짜와 참가자 설정</span></span>
         </button>
