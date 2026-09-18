@@ -20,7 +20,7 @@
   },
   "pnpm": {
     "overrides": {
-      "drizzle-orm": "커스텀 버전 또는 DB 패키지가 쓰는 정확한 버전 명시"
+      "drizzle-orm": "0.45.2"
     }
   }
 }
