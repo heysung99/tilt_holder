@@ -198,6 +198,7 @@ function AppShell() {
             isFinished: serverSession.isFinished,
             fundApplied: serverSession.fundApplied,
           });
+          setBuyInArrows(serverSession.buyInArrows ?? {});
         }
         if (Array.isArray(serverGames) && serverGames.length > 0) {
           setHistoryDates((currentDates) => {
@@ -258,11 +259,11 @@ function AppShell() {
   const totalFinalChips = settlementRows.reduce((total, row) => total + row.finalAmount, 0);
   const fundBalance = fundEntries.reduce((total, entry) => total + entry.amount, 0);
 
-  const saveSessionToServer = (sessionToSave: SessionState) => {
+  const saveSessionToServer = (sessionToSave: SessionState, arrowsToSave: Record<PlayerName, 'up' | 'down'>) => {
     fetch('/api/session', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sessionToSave),
+      body: JSON.stringify({ ...sessionToSave, buyInArrows: arrowsToSave }),
     }).catch((err) => {
       console.error('Failed to save session to server database:', err);
     });
@@ -280,7 +281,7 @@ function AppShell() {
     setBuyInArrows({});
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
-    saveSessionToServer(newSession);
+    saveSessionToServer(newSession, {});
     setActiveTab('game');
   };
 
@@ -303,7 +304,7 @@ function AppShell() {
     setBuyInArrows(arrows);
     setBuyInEditSnapshot(null);
     setIsEditingBuyIns(false);
-    saveSessionToServer(session);
+    saveSessionToServer(session, arrows);
   };
 
   const updateBuyIn = (name: PlayerName, delta: number) => {
@@ -701,11 +702,10 @@ function GameScreen({
             const arrow = buyInArrows[player.name];
             return (
               <div key={player.name} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5">
-                <span className="flex-1 text-sm font-bold text-[#20253a]">{player.name}</span>
+                <span className="flex-1 text-base font-bold text-[#20253a]">{player.name}</span>
                 {isEditingBuyIns ? (
                   <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg border border-[#dfe1ee] text-[#2d3d8f] hover:bg-[#eef0ff]" aria-label={`${player.name} 바이인 1회 줄이기`} data-testid={`button-buy-in-minus-${player.name}`} onClick={() => onBuyInChange(player.name, -1)}><Minus size={15} /></button>
                 ) : null}
-                <span className="mono min-w-10 text-center text-sm font-bold text-[#20253a]" data-testid={`count-buy-in-${player.name}`}>{session.buyIns[player.name] ?? 0}</span>
                 {arrow ? (
                   <Triangle
                     size={12}
@@ -714,6 +714,7 @@ function GameScreen({
                     data-testid={`arrow-buy-in-${player.name}`}
                   />
                 ) : null}
+                <span className="mono min-w-10 text-center text-base font-bold text-[#20253a]" data-testid={`count-buy-in-${player.name}`}>{session.buyIns[player.name] ?? 0}</span>
                 {isEditingBuyIns ? (
                   <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg bg-[#2d3d8f] text-white hover:bg-[#202e74]" aria-label={`${player.name} 바이인 1회 추가`} data-testid={`button-buy-in-plus-${player.name}`} onClick={() => onBuyInChange(player.name, 1)}><Plus size={15} /></button>
                 ) : null}
