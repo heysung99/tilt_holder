@@ -1586,9 +1586,21 @@ function SettlementSummaryModal({
 }
 
 function downloadSettlementImage(session: SessionState, settlementRows: SettlementRow[], expenses: ExpenseEntry[], grossFundContribution: number) {
+  const sortedRows = [...settlementRows].sort((a, b) => b.result - a.result);
+  const hasContribution = grossFundContribution > 0;
+  const expenseRowCount = (hasContribution ? 1 : 0) + expenses.length;
+  const finalTotal = grossFundContribution - expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+  const PLAYER_ROW_H = 62;
+  const EXPENSE_ROW_H = 46;
+  const estimatedHeight =
+    170 + 40 + 46 + sortedRows.length * PLAYER_ROW_H +
+    30 + 40 + (expenseRowCount === 0 ? 34 : expenseRowCount * EXPENSE_ROW_H) +
+    110;
+
   const canvas = document.createElement('canvas');
   canvas.width = 800;
-  canvas.height = 1100;
+  canvas.height = Math.max(760, estimatedHeight);
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
 
@@ -1602,91 +1614,111 @@ function downloadSettlementImage(session: SessionState, settlementRows: Settleme
 
   // Title
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 30px sans-serif';
-  ctx.fillText('TILT HOLDER - 정산 결과', 40, 55);
+  ctx.font = 'bold 34px sans-serif';
+  ctx.fillText('TILT HOLDER - 정산 결과', 40, 58);
 
   ctx.fillStyle = '#e9ef76';
-  ctx.font = '16px sans-serif';
-  ctx.fillText(`날짜: ${session.date}`, 40, 95);
-
-  const sortedRows = [...settlementRows].sort((a, b) => b.result - a.result);
+  ctx.font = 'bold 19px sans-serif';
+  ctx.fillText(`날짜: ${session.date}`, 40, 97);
 
   let y = 170;
   ctx.fillStyle = '#20253a';
-  ctx.font = 'bold 20px sans-serif';
+  ctx.font = 'bold 24px sans-serif';
   ctx.fillText('🏆 순위별 플레이어 결과', 40, y);
-  y += 35;
+  y += 40;
 
   // Table header
   ctx.fillStyle = '#eef0ff';
-  ctx.fillRect(40, y, 720, 36);
+  ctx.fillRect(40, y, 720, 46);
   ctx.fillStyle = '#2d3d8f';
-  ctx.font = 'bold 13px sans-serif';
-  ctx.fillText('순위 / 이름', 60, y + 23);
-  ctx.fillText('총 금액', 260, y + 23);
-  ctx.fillText('바이인', 410, y + 23);
-  ctx.fillText('남은 칩', 520, y + 23);
-  ctx.fillText('정산 결과', 640, y + 23);
-  y += 42;
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillText('순위 / 이름', 60, y + 29);
+  ctx.fillText('총 금액', 260, y + 29);
+  ctx.fillText('바이인', 410, y + 29);
+  ctx.fillText('남은 칩', 520, y + 29);
+  ctx.fillText('정산 결과', 640, y + 29);
+  y += 46;
 
   sortedRows.forEach((row, idx) => {
     ctx.fillStyle = idx % 2 === 0 ? '#ffffff' : '#f3f4ff';
-    ctx.fillRect(40, y, 720, 48);
+    ctx.fillRect(40, y, 720, PLAYER_ROW_H);
 
     ctx.fillStyle = '#20253a';
-    ctx.font = 'bold 15px sans-serif';
-    ctx.fillText(`${idx + 1}위  ${row.name}`, 60, y + 29);
+    ctx.font = 'bold 19px sans-serif';
+    ctx.fillText(`${idx + 1}위  ${row.name}`, 60, y + 37);
 
     ctx.fillStyle = row.result >= 0 ? '#16a34a' : '#dc2626';
-    ctx.fillText(`${row.result >= 0 ? '+' : ''}${row.result.toLocaleString()}원`, 260, y + 29);
+    ctx.fillText(`${row.result >= 0 ? '+' : ''}${row.result.toLocaleString()}원`, 260, y + 37);
 
     ctx.fillStyle = '#596078';
-    ctx.font = '14px sans-serif';
+    ctx.font = '17px sans-serif';
     const buyInCount = Math.round(row.buyInTotal / 50000);
-    ctx.fillText(`${buyInCount}회`, 410, y + 29);
+    ctx.fillText(`${buyInCount}회`, 410, y + 37);
 
-    ctx.fillText(`${row.finalAmount.toLocaleString()}원`, 520, y + 29);
+    ctx.fillText(`${row.finalAmount.toLocaleString()}원`, 520, y + 37);
 
     ctx.fillStyle = row.actualSettlement >= 0 ? '#2d3d8f' : '#dc2626';
-    ctx.font = 'bold 14px sans-serif';
-    ctx.fillText(`${row.actualSettlement >= 0 ? '+' : ''}${row.actualSettlement.toLocaleString()}원`, 640, y + 29);
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText(`${row.actualSettlement >= 0 ? '+' : ''}${row.actualSettlement.toLocaleString()}원`, 640, y + 37);
 
-    y += 54;
+    y += PLAYER_ROW_H;
   });
 
   // Expenses section
-  y += 20;
+  y += 30;
   ctx.fillStyle = '#20253a';
-  ctx.font = 'bold 20px sans-serif';
+  ctx.font = 'bold 24px sans-serif';
   ctx.fillText('💳 당일 사용 공금 지출 내역', 40, y);
-  y += 35;
+  y += 40;
 
-  if (expenses.length === 0 && grossFundContribution <= 0) {
+  if (expenseRowCount === 0) {
     ctx.fillStyle = '#697087';
-    ctx.font = '14px sans-serif';
+    ctx.font = '17px sans-serif';
     ctx.fillText('지출 내역이 없습니다.', 40, y);
+    y += 34;
   } else {
-    if (grossFundContribution > 0) {
+    if (hasContribution) {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(40, y, 720, 36);
+      ctx.fillRect(40, y, 720, EXPENSE_ROW_H);
       ctx.fillStyle = '#20253a';
-      ctx.font = '14px sans-serif';
-      ctx.fillText('기부액(딴 돈의 절반)', 60, y + 23);
+      ctx.font = 'bold 17px sans-serif';
+      ctx.fillText('기부액(딴 돈의 절반)', 60, y + 30);
       ctx.fillStyle = '#16a34a';
-      ctx.fillText(`+${grossFundContribution.toLocaleString()}원`, 520, y + 23);
-      y += 42;
+      ctx.fillText(`+${grossFundContribution.toLocaleString()}원`, 520, y + 30);
+      y += EXPENSE_ROW_H;
     }
     expenses.forEach((exp) => {
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(40, y, 720, 36);
+      ctx.fillRect(40, y, 720, EXPENSE_ROW_H);
       ctx.fillStyle = '#20253a';
-      ctx.font = '14px sans-serif';
-      ctx.fillText(exp.title, 60, y + 23);
+      ctx.font = '17px sans-serif';
+      ctx.fillText(exp.title, 60, y + 30);
       ctx.fillStyle = '#bd604d';
-      ctx.fillText(`-${exp.amount.toLocaleString()}원 (${exp.payer})`, 520, y + 23);
-      y += 42;
+      ctx.font = 'bold 17px sans-serif';
+      ctx.fillText(`-${exp.amount.toLocaleString()}원 (${exp.payer})`, 520, y + 30);
+      y += EXPENSE_ROW_H;
     });
   }
+
+  // Final settlement total = sum of the fund expense history section above
+  y += 24;
+  ctx.strokeStyle = '#d8d9df';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(40, y);
+  ctx.lineTo(760, y);
+  ctx.stroke();
+  y += 46;
+
+  ctx.fillStyle = '#20253a';
+  ctx.font = 'bold 24px sans-serif';
+  ctx.fillText('최종 정산액', 60, y);
+
+  ctx.fillStyle = finalTotal >= 0 ? '#16a34a' : '#dc2626';
+  ctx.font = 'bold 28px sans-serif';
+  const finalText = `${finalTotal >= 0 ? '+' : ''}${finalTotal.toLocaleString()}원`;
+  const finalTextWidth = ctx.measureText(finalText).width;
+  ctx.fillText(finalText, 760 - finalTextWidth, y);
 
   const link = document.createElement('a');
   link.download = `settlement-${session.date}.png`;
