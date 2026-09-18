@@ -8,14 +8,12 @@ import {
   Banknote,
   CalendarDays,
   Check,
-  CheckCircle2,
   ChevronRight,
   CirclePlus,
   Clock3,
   Crown,
   Coins,
   Gamepad2,
-  History,
   Landmark,
   Minus,
   Pencil,
@@ -143,7 +141,7 @@ function AppShell() {
   const [buyInEditSnapshot, setBuyInEditSnapshot] = useState<Record<string, number> | null>(null);
   const [buyInArrows, setBuyInArrows] = useState<Record<PlayerName, 'up' | 'down'>>({});
 
-  const requestCreateSession = (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => {
+  const requestCreateSession = (draft: { date: string; participantNames: PlayerName[] }) => {
     setPasswordModalConfig({
       title: '게임 세션 만들기',
       onSuccess: () => createSession(draft),
@@ -269,11 +267,15 @@ function AppShell() {
     });
   };
 
-  const createSession = (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => {
+  const createSession = (draft: { date: string; participantNames: PlayerName[] }) => {
     const newSession: SessionState = {
-      ...draft,
+      date: draft.date,
+      gameName: `${draft.date} 세션`,
+      participantNames: draft.participantNames,
       buyIns: makeAmountRecord(draft.participantNames, 1),
       finalAmounts: makeAmountRecord(draft.participantNames, 0),
+      hostName: null,
+      bankName: null,
       isFinished: false,
       fundApplied: false,
     };
@@ -474,8 +476,8 @@ function AppShell() {
 
     if (grossFundContribution !== 0) {
       const fundItem = {
-        id: `game-${session.date}-${session.gameName}`,
-        title: `${session.gameName} 정산 공금`,
+        id: `game-${session.date}-${Date.now()}`,
+        title: `${session.date} 정산 공금`,
         meta: `${formatSessionDate(session.date)} · 손실금 - 지급액`,
         amount: grossFundContribution,
       };
@@ -563,6 +565,7 @@ function AppShell() {
             buyInArrows={buyInArrows}
             onStartEditBuyIns={startEditingBuyIns}
             onFinishEditBuyIns={finishEditingBuyIns}
+            onVerifyPassword={verifyPassword}
           />
         )}
         {activeTab === 'settle' && (
@@ -628,6 +631,24 @@ function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: 
   );
 }
 
+function overallRanking(users: Player[], historicalRecords: HistoricalRecord[]) {
+  const stats = users
+    .map((player) => {
+      const record = historicalRecords.find((item) => item.name === player.name);
+      const values = record?.values ?? [];
+      const playedValues = values.filter((val): val is number => val !== null && val !== undefined);
+      return { name: player.name, played: playedValues.length, net: playedValues.reduce((sum, val) => sum + val, 0) };
+    })
+    .sort((a, b) => b.net - a.net);
+
+  const ranked = stats.filter((stat) => stat.played >= 5);
+  const rankMap = new Map<PlayerName, { rank: number; tier: ReturnType<typeof rankingTier> }>();
+  ranked.forEach((stat, index) => {
+    rankMap.set(stat.name, { rank: index + 1, tier: rankingTier(index + 1, ranked.length) });
+  });
+  return rankMap;
+}
+
 function GameScreen({
   session,
   users,
@@ -640,11 +661,12 @@ function GameScreen({
   buyInArrows,
   onStartEditBuyIns,
   onFinishEditBuyIns,
+  onVerifyPassword,
 }: {
   session: SessionState;
   users: Player[];
   historicalRecords: HistoricalRecord[];
-  onCreateSession: (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => void;
+  onCreateSession: (draft: { date: string; participantNames: PlayerName[] }) => void;
   onBuyInChange: (name: PlayerName, delta: number) => void;
   onAddUser: (name: string) => boolean;
   onRenameUser: (currentName: PlayerName, nextName: string) => boolean;
@@ -652,11 +674,15 @@ function GameScreen({
   buyInArrows: Record<PlayerName, 'up' | 'down'>;
   onStartEditBuyIns: () => void;
   onFinishEditBuyIns: () => void;
+  onVerifyPassword: (title: string, onSuccess: () => void) => void;
 }) {
-  const [showHistory, setShowHistory] = useState(false);
   const [showNewGame, setShowNewGame] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [editingName, setEditingName] = useState<PlayerName | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   const isSessionInProgress = session.participantNames.length > 0 && !session.fundApplied;
+  const rankMap = overallRanking(users, historicalRecords);
 
   const toggleNewGameForm = () => {
     if (!showNewGame && isSessionInProgress) {
@@ -664,6 +690,14 @@ function GameScreen({
       if (!proceed) return;
     }
     setShowNewGame((current) => !current);
+  };
+
+  const handleAdminToggle = () => {
+    if (isAdmin) {
+      setIsAdmin(false);
+      return;
+    }
+    onVerifyPassword('게임 관리자 모드', () => setIsAdmin(true));
   };
 
   return (
@@ -677,7 +711,32 @@ function GameScreen({
         <span><span className="mono block text-[10px] font-bold uppercase tracking-[0.16em] text-[#cbd1f2]">new game</span><span className="mt-1 block text-lg font-bold">게임 개설</span></span>
         <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e9ef76] text-[#2d3d8f]"><CirclePlus size={20} /></span>
       </button>
-      {showNewGame ? <NewSessionForm users={users} historicalRecords={historicalRecords} currentSession={session} onCreate={(draft) => { onCreateSession(draft); setShowNewGame(false); }} onAddUser={onAddUser} onRenameUser={onRenameUser} /> : null}
+      {showNewGame ? <NewSessionForm users={users} historicalRecords={historicalRecords} currentSession={session} onCreate={(draft) => { onCreateSession(draft); setShowNewGame(false); }} onAddUser={onAddUser} /> : null}
+
+      <div className="mb-4 flex items-center justify-between">
+        <div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">game</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">게임</h3></div>
+        <button type="button" onClick={handleAdminToggle} className="rounded-xl border border-[#dfe1ee] bg-white px-3 py-1.5 text-xs font-bold text-[#2d3d8f]">{isAdmin ? '관리자 모드 닫기' : '⚙️ 관리자'}</button>
+      </div>
+
+      {isAdmin ? (
+        <section className="rise-in mb-4 rounded-2xl border border-[#bd604d] bg-[#fff8f5] p-4">
+          <h4 className="text-xs font-bold text-[#bd604d]">관리자 모드: 유저명 수정</h4>
+          <div className="mt-2 space-y-2">
+            {users.map((user) => editingName === user.name ? (
+              <div key={user.name} className="flex gap-2">
+                <input value={editingValue} onChange={(event) => setEditingValue(event.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border border-[#dfe1ee] bg-white px-2 text-sm outline-none focus:border-[#2d3d8f]" autoFocus data-testid={`input-edit-user-${user.name}`} />
+                <button type="button" className="text-xs font-bold text-[#2d3d8f]" onClick={() => { if (onRenameUser(user.name, editingValue)) { setEditingName(null); setEditingValue(''); } }}>저장</button>
+                <button type="button" className="text-xs text-[#858a9b]" onClick={() => setEditingName(null)}>취소</button>
+              </div>
+            ) : (
+              <div key={user.name} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 text-xs">
+                <span className="font-bold text-[#20253a]">{user.name}</span>
+                <button type="button" className="flex items-center gap-1 text-[#2d3d8f]" data-testid={`button-edit-user-${user.name}`} onClick={() => { setEditingName(user.name); setEditingValue(user.name); }}><Pencil size={12} /> 수정</button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="rise-in delay-2 mt-6 rounded-[18px] border border-[#d9dcf1] bg-[#f3f4ff] p-4" data-testid="panel-buy-in-controls">
         <div className="mb-3 flex items-center justify-between">
@@ -698,56 +757,45 @@ function GameScreen({
           </div>
         </div>
         <div className="space-y-2">
-          {users.filter((player) => session.participantNames.includes(player.name)).map((player) => {
-            const arrow = buyInArrows[player.name];
-            return (
-              <div key={player.name} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5">
-                <span className="flex-1 text-base font-bold text-[#20253a]">{player.name}</span>
-                {isEditingBuyIns ? (
-                  <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg border border-[#dfe1ee] text-[#2d3d8f] hover:bg-[#eef0ff]" aria-label={`${player.name} 바이인 1회 줄이기`} data-testid={`button-buy-in-minus-${player.name}`} onClick={() => onBuyInChange(player.name, -1)}><Minus size={15} /></button>
-                ) : null}
-                {arrow ? (
-                  <Triangle
-                    size={12}
-                    className={arrow === 'up' ? 'rotate-0 text-[#d1453b]' : 'rotate-180 text-[#1f9d5a]'}
-                    fill="currentColor"
-                    data-testid={`arrow-buy-in-${player.name}`}
-                  />
-                ) : null}
-                <span className="mono min-w-10 text-center text-base font-bold text-[#20253a]" data-testid={`count-buy-in-${player.name}`}>{session.buyIns[player.name] ?? 0}</span>
-                {isEditingBuyIns ? (
-                  <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg bg-[#2d3d8f] text-white hover:bg-[#202e74]" aria-label={`${player.name} 바이인 1회 추가`} data-testid={`button-buy-in-plus-${player.name}`} onClick={() => onBuyInChange(player.name, 1)}><Plus size={15} /></button>
-                ) : null}
-              </div>
-            );
-          })}
+          {users
+            .filter((player) => session.participantNames.includes(player.name))
+            .sort((a, b) => (session.buyIns[a.name] ?? 0) - (session.buyIns[b.name] ?? 0))
+            .map((player) => {
+              const arrow = buyInArrows[player.name];
+              const ranked = rankMap.get(player.name);
+              return (
+                <div key={player.name} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5">
+                  <span className="mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#f1f1ee] text-xs font-bold text-[#858a9b]">
+                    {ranked ? String(ranked.rank).padStart(2, '0') : '-'}
+                  </span>
+                  <div className="flex min-w-0 flex-1 items-center gap-1">
+                    <span className="truncate text-base font-bold text-[#20253a]">{player.name}</span>
+                    {arrow ? (
+                      <Triangle
+                        size={12}
+                        className={arrow === 'up' ? 'rotate-0 text-[#d1453b]' : 'rotate-180 text-[#1f9d5a]'}
+                        fill="currentColor"
+                        data-testid={`arrow-buy-in-${player.name}`}
+                      />
+                    ) : null}
+                  </div>
+                  {ranked ? (
+                    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${ranked.tier.className}`}>
+                      <span>{ranked.tier.icon}</span>
+                    </span>
+                  ) : null}
+                  {isEditingBuyIns ? (
+                    <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg border border-[#dfe1ee] text-[#2d3d8f] hover:bg-[#eef0ff]" aria-label={`${player.name} 바이인 1회 줄이기`} data-testid={`button-buy-in-minus-${player.name}`} onClick={() => onBuyInChange(player.name, -1)}><Minus size={15} /></button>
+                  ) : null}
+                  <span className="mono min-w-10 text-center text-base font-bold text-[#20253a]" data-testid={`count-buy-in-${player.name}`}>{session.buyIns[player.name] ?? 0}</span>
+                  {isEditingBuyIns ? (
+                    <button type="button" className="tilt-button flex h-9 w-9 items-center justify-center rounded-lg bg-[#2d3d8f] text-white hover:bg-[#202e74]" aria-label={`${player.name} 바이인 1회 추가`} data-testid={`button-buy-in-plus-${player.name}`} onClick={() => onBuyInChange(player.name, 1)}><Plus size={15} /></button>
+                  ) : null}
+                </div>
+              );
+            })}
         </div>
       </section>
-
-      <section className="rise-in delay-2 mt-6 grid grid-cols-2 gap-3">
-        <button type="button" className="tilt-button tilt-card flex min-h-[126px] flex-col justify-between p-4 text-left hover:border-[#bfc7f0]" data-testid="button-new-game" onClick={toggleNewGameForm}>
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#eef0ff] text-[#2d3d8f]"><CirclePlus size={19} /></span>
-          <span><span className="block text-sm font-bold text-[#20253a]">새 세션</span><span className="mt-1 block text-xs text-[#697087]">날짜와 참가자 설정</span></span>
-        </button>
-        <button type="button" className="tilt-button tilt-card flex min-h-[126px] flex-col justify-between p-4 text-left hover:border-[#bfc7f0]" data-testid="button-game-history" onClick={() => setShowHistory((current) => !current)}>
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#fff0e9] text-[#bd604d]"><History size={18} /></span>
-          <span><span className="block text-sm font-bold text-[#20253a]">지난 기록</span><span className="mt-1 block text-xs text-[#697087]">오늘 2게임 완료</span></span>
-        </button>
-      </section>
-
-      {showHistory ? (
-        <section className="rise-in mt-6 rounded-[18px] border border-dashed border-[#d8d9df] bg-[#fafaf6] p-5" data-testid="panel-game-history">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-[#20253a]">오늘의 기록</h3>
-            <button type="button" className="text-xs font-semibold text-[#697087] underline underline-offset-4" data-testid="button-close-history" onClick={() => setShowHistory(false)}>닫기</button>
-          </div>
-          <div className="space-y-3 text-sm">
-            <div className="flex items-center justify-between"><span className="text-[#697087]">스플렌더</span><span className="font-bold text-[#20253a]">민준 1위</span></div>
-            <div className="flex items-center justify-between"><span className="text-[#697087]">카탄</span><span className="font-bold text-[#20253a]">서연 1위</span></div>
-          </div>
-        </section>
-      ) : null}
-
     </div>
   );
 }
@@ -762,37 +810,24 @@ function NewSessionForm({
   currentSession,
   onCreate,
   onAddUser,
-  onRenameUser,
 }: {
   users: Player[];
   historicalRecords: HistoricalRecord[];
   currentSession: SessionState;
-  onCreate: (draft: { date: string; gameName: string; participantNames: PlayerName[]; hostName: PlayerName; bankName: PlayerName }) => void;
+  onCreate: (draft: { date: string; participantNames: PlayerName[] }) => void;
   onAddUser: (name: string) => boolean;
-  onRenameUser: (currentName: PlayerName, nextName: string) => boolean;
 }) {
   const [date, setDate] = useState(currentSession.date);
-  const [gameName, setGameName] = useState(currentSession.gameName);
   const [participantNames, setParticipantNames] = useState<PlayerName[]>(currentSession.participantNames);
-  const [hostName, setHostName] = useState<PlayerName | null>(currentSession.hostName);
-  const [bankName, setBankName] = useState<PlayerName | null>(currentSession.bankName);
   const [newUserName, setNewUserName] = useState('');
-  const [editingName, setEditingName] = useState<PlayerName | null>(null);
-  const [editingValue, setEditingValue] = useState('');
   const orderedUsers = users
     .map((player, index) => ({ player, index, participationCount: historicalParticipationCount(player.name, historicalRecords) }))
     .sort((a, b) => b.participationCount - a.participationCount || a.index - b.index);
 
   const toggleParticipant = (name: PlayerName) => {
-    setParticipantNames((current) => {
-      if (current.includes(name)) {
-        const next = current.filter((item) => item !== name);
-        if (hostName === name) setHostName(next[0] ?? null);
-        if (bankName === name) setBankName(next[0] ?? null);
-        return next;
-      }
-      return [...current, name];
-    });
+    setParticipantNames((current) => (
+      current.includes(name) ? current.filter((item) => item !== name) : [...current, name]
+    ));
   };
 
   return (
@@ -801,8 +836,8 @@ function NewSessionForm({
       data-testid="form-new-session"
       onSubmit={(event) => {
         event.preventDefault();
-        if (participantNames.length > 0 && gameName.trim()) {
-          onCreate({ date, gameName: gameName.trim(), participantNames, hostName: hostName!, bankName: bankName! });
+        if (participantNames.length > 0) {
+          onCreate({ date, participantNames });
         }
       }}
     >
@@ -810,49 +845,37 @@ function NewSessionForm({
         <div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">new session</p><h3 className="mt-1 text-lg font-bold text-[#20253a]">게임 세션 만들기</h3></div>
         <CalendarDays size={19} className="text-[#2d3d8f]" />
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-semibold text-[#596078]">게임 날짜<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm text-[#20253a] outline-none focus:border-[#2d3d8f]" data-testid="input-session-date" /></label>
-        <label className="text-xs font-semibold text-[#596078]">게임 이름<input value={gameName} onChange={(event) => setGameName(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm text-[#20253a] outline-none focus:border-[#2d3d8f]" placeholder="예: 보난자" data-testid="input-session-name" /></label>
-      </div>
+      <label className="text-xs font-semibold text-[#596078]">게임 날짜<input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm text-[#20253a] outline-none focus:border-[#2d3d8f]" data-testid="input-session-date" /></label>
       <fieldset className="mt-4">
-        <legend className="flex items-center gap-1.5 text-xs font-semibold text-[#596078]"><Crown size={13} className="text-[#2d3d8f]" /> 참가자 선택 · 역할 지정</legend>
+        <legend className="flex items-center gap-1.5 text-xs font-semibold text-[#596078]"><Crown size={13} className="text-[#2d3d8f]" /> 참가자 선택</legend>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          {orderedUsers.map(({ player, participationCount }) => {
+          {orderedUsers.map(({ player }) => {
             const selected = participantNames.includes(player.name);
-            return <div key={player.name} className={`rounded-xl border p-2 ${selected ? 'border-[#bfc7f0] bg-[#eef0ff]' : 'border-[#e4e5ea] bg-white'}`}>
-              <button type="button" className={`tilt-button flex w-full items-center gap-2 text-left text-sm font-semibold ${selected ? 'text-[#2d3d8f]' : 'text-[#858a9b]'}`} data-testid={`button-select-participant-${player.name}`} onClick={() => toggleParticipant(player.name)}><span className="flex w-5 shrink-0 justify-center">{selected ? <Check size={14} /> : null}</span><span className="min-w-0 flex-1 truncate">{player.name}</span><span className="mono text-[9px] font-normal text-[#a0a4b1]">{participationCount}회</span></button>
-              <div className="mt-2 flex items-center justify-between gap-1 border-t border-[#ececf0] pt-2 text-[9px] font-bold tracking-wide">
-                <label className={`flex items-center gap-1 ${selected ? 'text-[#2d3d8f]' : 'text-[#b1b4bf]'}`}><input type="radio" name="host-player" checked={hostName === player.name} disabled={!selected} onChange={() => setHostName(player.name)} /> HOST</label>
-                <label className={`flex items-center gap-1 ${selected ? 'text-[#bd604d]' : 'text-[#b1b4bf]'}`}><input type="radio" name="bank-player" checked={bankName === player.name} disabled={!selected} onChange={() => setBankName(player.name)} /> BANK</label>
-              </div>
-            </div>;
+            return (
+              <button
+                key={player.name}
+                type="button"
+                className={`tilt-button flex w-full items-center gap-2 rounded-xl border p-3 text-left text-sm font-semibold ${selected ? 'border-[#bfc7f0] bg-[#eef0ff] text-[#2d3d8f]' : 'border-[#e4e5ea] bg-white text-[#858a9b]'}`}
+                data-testid={`button-select-participant-${player.name}`}
+                onClick={() => toggleParticipant(player.name)}
+              >
+                <span className="flex w-5 shrink-0 justify-center">{selected ? <Check size={14} /> : null}</span>
+                <span className="min-w-0 flex-1 truncate">{player.name}</span>
+              </button>
+            );
           })}
         </div>
       </fieldset>
       <div className="mt-4 rounded-xl bg-[#fafaf6] p-3">
-        <div className="flex items-center gap-2"><UserPlus size={15} className="text-[#2d3d8f]" /><p className="text-xs font-bold text-[#20253a]">유저 관리</p></div>
+        <div className="flex items-center gap-2"><UserPlus size={15} className="text-[#2d3d8f]" /><p className="text-xs font-bold text-[#20253a]">새 유저 추가</p></div>
         <div className="mt-2 flex gap-2">
           <input value={newUserName} onChange={(event) => setNewUserName(event.target.value)} className="h-10 min-w-0 flex-1 rounded-lg border border-[#dfe1ee] bg-white px-3 text-sm outline-none focus:border-[#2d3d8f]" placeholder="새 유저명" data-testid="input-new-user-name" />
           <button type="button" className="tilt-button rounded-lg bg-[#2d3d8f] px-3 text-xs font-bold text-white" data-testid="button-add-user" onClick={() => { if (onAddUser(newUserName)) setNewUserName(''); }}>추가</button>
         </div>
-        <div className="mt-3 space-y-2">
-          {users.map((user) => editingName === user.name ? (
-            <div key={user.name} className="flex gap-2">
-              <input value={editingValue} onChange={(event) => setEditingValue(event.target.value)} className="h-9 min-w-0 flex-1 rounded-lg border border-[#dfe1ee] bg-white px-2 text-sm outline-none focus:border-[#2d3d8f]" autoFocus data-testid={`input-edit-user-${user.name}`} />
-              <button type="button" className="text-xs font-bold text-[#2d3d8f]" onClick={() => { if (onRenameUser(user.name, editingValue)) { setEditingName(null); setEditingValue(''); } }}>저장</button>
-              <button type="button" className="text-xs text-[#858a9b]" onClick={() => setEditingName(null)}>취소</button>
-            </div>
-          ) : (
-            <div key={user.name} className="flex items-center justify-between text-xs text-[#697087]">
-              <span>{user.name}</span>
-              <button type="button" className="flex items-center gap-1 text-[#2d3d8f]" data-testid={`button-edit-user-${user.name}`} onClick={() => { setEditingName(user.name); setEditingValue(user.name); }}><Pencil size={12} /> 수정</button>
-            </div>
-          ))}
-        </div>
       </div>
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-xs text-[#858a9b]">{participantNames.length}명 선택됨</p>
-        <button type="submit" disabled={!gameName.trim() || participantNames.length === 0 || !hostName || !bankName} className="tilt-button rounded-xl bg-[#2d3d8f] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-create-session">참가자 선택 완료</button>
+        <button type="submit" disabled={participantNames.length === 0} className="tilt-button rounded-xl bg-[#2d3d8f] px-4 py-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-create-session">참가자 선택 완료</button>
       </div>
     </form>
   );
@@ -908,22 +931,11 @@ function SettleScreen({
     <div>
       <section className="rise-in delay-1 tilt-card bg-[#e9ef76] p-5 sm:p-7" data-testid="card-settlement-summary">
         <div className="flex items-end justify-between">
-          <div><p className="text-sm font-semibold text-[#596313]">플러스 플레이어 지급액</p><p className="mono mt-2 text-[28px] font-bold tracking-[-0.08em] text-[#20253a]">{formatWon(totalPayout)}</p></div>
-          <div className="text-right"><p className="text-xs text-[#596313]">{settlementRows.length}명이 참여</p><p className="mt-1 text-sm font-bold text-[#20253a]">바이인 {formatWon(totalBuyIns)}</p></div>
+          <div><p className="text-xs text-[#596313]">{settlementRows.length}명이 참여</p><p className="mt-1 text-sm font-bold text-[#20253a]">바이인 {formatWon(totalBuyIns)}</p></div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-2 border-t border-[#cfd66c] pt-4">
           <div><p className="text-xs text-[#596313]">오늘 최종 공금액</p><p className="mono mt-1 text-lg font-bold text-[#20253a]">{formatSignedWon(finalFundAmount)}</p></div>
           <div className="text-right"><p className="text-xs text-[#596313]">종료 후 공금 잔액</p><p className="mono mt-1 text-lg font-bold text-[#20253a]">{formatWon(projectedFundBalance)}</p></div>
-        </div>
-      </section>
-      <section className="rise-in delay-1 mt-4 rounded-[18px] border border-[#d9dcf1] bg-[#f3f4ff] p-4" data-testid="panel-special-rule">
-        <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#2d3d8f]"><CheckCircle2 size={18} /></div>
-          <div>
-            <p className="text-sm font-bold text-[#20253a]">특수 룰 · 딴 돈의 50%만 지급</p>
-            <p className="mt-1 text-xs leading-5 text-[#697087]">바이인보다 많이 딴 금액의 절반만 지급하고, 나머지 절반은 게임 종료 시 공금으로 자동 귀속됩니다.</p>
-            <p className="mt-2 text-[11px] font-semibold text-[#2d3d8f]">예시: 100,000원 → 160,000원이라면 130,000원 지급 · 30,000원 공금</p>
-          </div>
         </div>
       </section>
       <div className="rise-in delay-2 mt-7">
@@ -1089,8 +1101,7 @@ function RankingScreen({
       ) : null}
 
       {/* Season Filter Selector */}
-      <div className="rise-in mb-4 flex items-center justify-between rounded-2xl border border-[#dfe1ee] bg-white p-2">
-        <span className="ml-2 text-xs font-bold text-[#697087]">시즌 선택</span>
+      <div className="rise-in mb-4 flex items-center rounded-2xl border border-[#dfe1ee] bg-white p-2">
         <div className="flex gap-1 overflow-x-auto py-1">
           <button
             type="button"
@@ -1291,7 +1302,9 @@ function FundScreen({
   const [showFundForm, setShowFundForm] = useState(false);
   const [fundAmount, setFundAmount] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
-  const spentThisMonth = fundEntries.filter((entry) => entry.amount < 0).reduce((total, entry) => total + Math.abs(entry.amount), 0);
+  const [showAllFund, setShowAllFund] = useState(false);
+  const recentFundEntries = fundEntries.slice().reverse();
+  const visibleFundEntries = showAllFund ? recentFundEntries : recentFundEntries.slice(0, 5);
 
   const handleAdminToggle = () => {
     if (isAdmin) {
@@ -1326,13 +1339,17 @@ function FundScreen({
       ) : null}
       <section className="rise-in delay-1 tilt-card bg-[#fff0e9] p-5 sm:p-7" data-testid="card-fund-balance">
         <div className="flex items-start justify-between"><div><p className="text-sm font-semibold text-[#8e5347]">현재 공금 잔액</p><p className="mono mt-2 text-[34px] font-bold tracking-[-0.09em] text-[#20253a]">{formatWon(fundBalance)}</p></div><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#bd604d]"><Landmark size={20} /></div></div>
-        <div className="mt-6 flex items-center justify-between border-t border-[#efcfc6] pt-4 text-xs"><span className="text-[#8e5347]">누적 사용액</span><span className="mono font-bold text-[#20253a]">{formatWon(spentThisMonth)}</span></div>
       </section>
       <div className="rise-in delay-2 mt-6 flex items-center justify-between"><div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">fund activity</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">최근 내역</h3></div><button type="button" className="tilt-button flex items-center gap-1.5 rounded-full border border-[#dfe1e7] bg-white px-3.5 py-2.5 text-xs font-bold text-[#2d3d8f]" data-testid="button-add-fund" onClick={() => setShowFundForm((current) => !current)}><Plus size={15} /> 기록 추가</button></div>
       {showFundForm ? <form className="rise-in mt-3 flex gap-2 rounded-[18px] border border-[#f0d1c7] bg-[#fff8f5] p-3" data-testid="form-add-fund" onSubmit={(event) => { event.preventDefault(); const amount = Number(fundAmount.replace(/[^0-9]/g, '')); if (amount > 0) { onAddDeposit(amount); setShowFundForm(false); setFundAmount(''); } }}><input value={fundAmount} onChange={(event) => setFundAmount(event.target.value)} inputMode="numeric" className="h-11 min-w-0 flex-1 rounded-xl border border-[#ecd9d3] bg-white px-3 text-sm outline-none focus:border-[#bd604d]" placeholder="입금 금액" data-testid="input-fund-amount" /><button type="submit" className="tilt-button rounded-xl bg-[#bd604d] px-4 text-xs font-bold text-white" data-testid="button-save-fund">추가</button></form> : null}
       <div className="rise-in delay-3 mt-3 tilt-card divide-y divide-[#ececf0]">
-        {fundEntries.slice().reverse().map((entry) => <FundRow key={entry.id} entry={entry} />)}
+        {visibleFundEntries.map((entry) => <FundRow key={entry.id} entry={entry} />)}
       </div>
+      {recentFundEntries.length > 5 ? (
+        <button type="button" className="tilt-button mt-3 flex w-full items-center justify-center rounded-xl border border-[#dfe1ee] bg-white py-2.5 text-xs font-bold text-[#2d3d8f]" data-testid="button-toggle-fund-history" onClick={() => setShowAllFund((current) => !current)}>
+          {showAllFund ? '최근 5개만 보기' : `전체 내역 보기 (${recentFundEntries.length})`}
+        </button>
+      ) : null}
       <section className="rise-in delay-4 mt-6 rounded-[18px] border border-dashed border-[#d8d9df] p-4" data-testid="panel-fund-empty-state"><div className="flex items-start gap-3"><Coins size={18} className="mt-0.5 text-[#9ba0ae]" /><div><p className="text-sm font-bold text-[#20253a]">공금 자동 귀속 내역도 함께 기록돼요</p><p className="mt-1 text-xs leading-5 text-[#697087]">게임을 종료하면 딴 돈의 절반이 이곳에 자동으로 추가됩니다.</p></div></div></section>
     </div>
   );
@@ -1386,7 +1403,7 @@ function SettlementSummaryModal({
 
         <div className="mt-5 space-y-4">
           <div className="rounded-2xl bg-[#eef0ff] p-4">
-            <p className="text-xs font-bold text-[#2d3d8f]">정산 날짜: {session.date} ({session.gameName})</p>
+            <p className="text-xs font-bold text-[#2d3d8f]">정산 날짜: {session.date}</p>
           </div>
 
           <div>
@@ -1474,7 +1491,7 @@ function downloadSettlementImage(session: SessionState, settlementRows: Settleme
 
   ctx.fillStyle = '#e9ef76';
   ctx.font = '16px sans-serif';
-  ctx.fillText(`날짜: ${session.date}  |  게임명: ${session.gameName}`, 40, 95);
+  ctx.fillText(`날짜: ${session.date}`, 40, 95);
 
   const sortedRows = [...settlementRows].sort((a, b) => b.result - a.result);
 

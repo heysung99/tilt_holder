@@ -77,10 +77,11 @@
 
 @layer base {
   * { @apply border-border; }
-  html { background: hsl(var(--background)); }
+  html { background: hsl(var(--background)); overscroll-behavior-y: none; }
   body {
     @apply font-sans antialiased bg-background text-foreground;
     min-width: 320px;
+    overscroll-behavior-y: none;
   }
   button, a, input { -webkit-tap-highlight-color: transparent; }
 }
@@ -125,6 +126,8 @@
   background: rgba(255,255,255,.94);
   box-shadow: 0 -10px 30px rgba(35,41,72,.06);
   backdrop-filter: blur(18px);
+  transform: translateZ(0);
+  will-change: transform;
 }
 .dark .tilt-nav { background: rgba(33,38,62,.94); }
 .tilt-nav-item { transition: color 180ms ease, transform 180ms ease; }
