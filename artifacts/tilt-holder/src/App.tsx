@@ -20,6 +20,7 @@ import {
   Pencil,
   Plus,
   ReceiptText,
+  RefreshCw,
   RotateCcw,
   Trophy,
   Triangle,
@@ -155,6 +156,7 @@ function AppShell() {
   const [buyInArrows, setBuyInArrows] = useState<Record<PlayerName, 'up' | 'down'>>({});
   const [buyInLog, setBuyInLog] = useState<BuyInLogEntry[]>([]);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -210,8 +212,8 @@ function AppShell() {
     setPasswordModalConfig({ title, onSuccess });
   };
 
-  useEffect(() => {
-    Promise.all([
+  const fetchAppData = () => {
+    return Promise.all([
       fetch('/api/users').then((r) => (r.ok ? r.json() : [])),
       fetch('/api/expenses').then((r) => (r.ok ? r.json() : [])),
       fetch('/api/fund').then((r) => (r.ok ? r.json() : [])),
@@ -282,7 +284,17 @@ function AppShell() {
       .catch((err) => {
         console.error('Failed to fetch from central DB:', err);
       });
+  };
+
+  useEffect(() => {
+    fetchAppData();
   }, []);
+
+  const handleRefreshClick = async () => {
+    setIsRefreshing(true);
+    await fetchAppData();
+    setIsRefreshing(false);
+  };
 
   const participantDetails = users.filter((player) => session.participantNames.includes(player.name));
   const settlementRows: SettlementRow[] = participantDetails.map((player) => {
@@ -618,14 +630,25 @@ function AppShell() {
       <main className="tilt-container page-enter pb-[480px] pt-6 sm:pt-9">
         <header className="mb-8 flex items-center justify-between gap-3">
           <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
-          <button
-            type="button"
-            onClick={handleInstallClick}
-            className="tilt-button flex shrink-0 items-center gap-1.5 rounded-full border border-[#dfe1ee] bg-white px-3 py-2 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff]"
-            data-testid="button-install-shortcut"
-          >
-            <Download size={14} /> 바로가기 저장
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRefreshClick}
+              className="tilt-button flex items-center justify-center rounded-full border border-[#dfe1ee] bg-white p-2.5 text-[#2d3d8f] hover:bg-[#eef0ff]"
+              data-testid="button-refresh"
+              aria-label="새로고침"
+            >
+              <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+            </button>
+            <button
+              type="button"
+              onClick={handleInstallClick}
+              className="tilt-button flex items-center gap-1.5 rounded-full border border-[#dfe1ee] bg-white px-3 py-2 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff]"
+              data-testid="button-install-shortcut"
+            >
+              <Download size={14} /> 바로가기 저장
+            </button>
+          </div>
         </header>
 
         {activeTab === 'game' && (
