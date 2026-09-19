@@ -872,6 +872,7 @@ function GameScreen({
             </button>
           </div>
         </div>
+        <p className="mb-2 text-center text-xs font-bold text-[#858a9b]">이름을 클릭하여 플레이어 전적 데이터를 확인하세요</p>
         <div className="space-y-2">
           {(() => {
             const participants = users.filter((player) => session.participantNames.includes(player.name));
@@ -1363,7 +1364,7 @@ function RankingScreen({
         </div>
       </div>
 
-      <p className="rise-in mb-2 text-xs font-bold text-[#858a9b]">이름을 클릭하여 플레이어 전적 데이터를 확인하세요</p>
+      <p className="rise-in mb-2 text-center text-xs font-bold text-[#858a9b]">이름을 클릭하여 플레이어 전적 데이터를 확인하세요</p>
 
       <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
         <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4">
