@@ -1191,6 +1191,55 @@ function rankingTier(rank: number, total: number) {
   return tiers[tierIndex];
 }
 
+function computeTierRanges(totalRanked: number) {
+  const ranges: { label: string; icon: string; className: string; rankRange: string }[] = [];
+  for (let rank = 1; rank <= totalRanked; rank++) {
+    const tier = rankingTier(rank, totalRanked);
+    const last = ranges[ranges.length - 1];
+    if (last && last.label === tier.label) {
+      const start = last.rankRange.split('~')[0];
+      last.rankRange = `${start}~${rank}위`;
+    } else {
+      ranges.push({ ...tier, rankRange: `${rank}위` });
+    }
+  }
+  return ranges;
+}
+
+function TierTableModal({ totalRanked, onClose }: { totalRanked: number; onClose: () => void }) {
+  const ranges = computeTierRanges(totalRanked);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+      <div className="rise-in max-h-[85vh] w-full max-w-[420px] overflow-y-auto rounded-[24px] bg-white p-6 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#ececf0] pb-4">
+          <h3 className="text-lg font-bold text-[#20253a]">티어 등급표</h3>
+          <button type="button" onClick={onClose} className="rounded-full bg-[#f1f1ee] px-3 py-1 text-xs font-bold text-[#697087]">닫기</button>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-[#697087]">
+          1~3위는 고정 티어이고, 4위부터는 남은 랭크 인원을 성적순으로 6등분해서 다이아~아이언 티어를 배정합니다.
+        </p>
+        <div className="mt-4 divide-y divide-[#ececf0] rounded-xl border border-[#ececf0]">
+          {ranges.length === 0 ? (
+            <p className="p-4 text-xs text-[#858a9b]">아직 랭크에 오른 참여자가 없습니다.</p>
+          ) : (
+            ranges.map((tier) => (
+              <div key={tier.label} className="flex items-center justify-between p-3">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ${tier.className}`}>
+                  <span>{tier.icon}</span>
+                  <span>{tier.label}</span>
+                </span>
+                <span className="mono text-xs font-bold text-[#20253a]">{tier.rankRange}</span>
+              </div>
+            ))
+          )}
+        </div>
+        <p className="mt-3 text-[11px] text-[#a0a4b1]">현재 랭크 인원 {totalRanked}명 기준</p>
+      </div>
+    </div>
+  );
+}
+
 function RankingScreen({
   users,
   historyDates,
@@ -1208,6 +1257,7 @@ function RankingScreen({
   const [selectedSeason, setSelectedSeason] = useState<string>('ALL');
   const [selectedDate, setSelectedDate] = useState(historyDates[historyDates.length - 1] ?? '');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showTierTable, setShowTierTable] = useState(false);
 
   const handleAdminToggle = () => {
     if (isAdmin) {
@@ -1390,6 +1440,17 @@ function RankingScreen({
           </div>
         </div>
       </section>
+
+      <button
+        type="button"
+        className="tilt-button mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#dfe1ee] bg-white py-2.5 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff]"
+        data-testid="button-tier-table"
+        onClick={() => setShowTierTable(true)}
+      >
+        <Trophy size={14} /> 티어 등급표
+      </button>
+
+      {showTierTable ? <TierTableModal totalRanked={rankedPlayers.length} onClose={() => setShowTierTable(false)} /> : null}
 
       {unrankedPlayers.length > 0 ? (
         <section className="rise-in delay-2 mt-6 tilt-card overflow-hidden" data-testid="card-unranked-list">
