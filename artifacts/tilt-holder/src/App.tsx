@@ -1,8 +1,14 @@
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, Suspense, lazy, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import {
+  type Player,
+  type PlayerName,
+  overallRanking,
+  rankingTier,
+} from '@/lib/player-stats';
 import {
   ArrowUpRight,
   Banknote,
@@ -31,17 +37,17 @@ import { type HistoricalRecord } from '@/data/history';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 
+const PlayerAnalysisModal = lazy(() => import('@/components/player-analysis-modal'));
+
+const playerAnalysisFallback = (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+    <div className="rounded-2xl bg-white px-6 py-5 text-sm font-bold text-[#697087] shadow-2xl">불러오는 중...</div>
+  </div>
+);
+
 const queryClient = new QueryClient();
 
 type TabKey = 'game' | 'settle' | 'ranking' | 'fund';
-type PlayerName = string;
-
-type Player = {
-  name: PlayerName;
-  score: number;
-  color: string;
-  text: string;
-};
 
 type SessionState = {
   date: string;
@@ -157,6 +163,17 @@ function AppShell() {
   const [buyInLog, setBuyInLog] = useState<BuyInLogEntry[]>([]);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasEntered, setHasEntered] = useState(false);
+
+  useEffect(() => {
+    // A CSS animation targeting `transform` keeps resolving to a matrix (never
+    // truly `none`) for as long as `animation-fill-mode: both` holds it, which
+    // makes this element a containing block for `position: fixed` descendants
+    // (modals) even after the entrance animation visually settles. Dropping
+    // the animation class once it's done removes that containing block.
+    const timer = window.setTimeout(() => setHasEntered(true), 500);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -627,7 +644,7 @@ function AppShell() {
 
   return (
     <div className="tilt-shell">
-      <main className="tilt-container page-enter pb-[480px] pt-6 sm:pt-9">
+      <main className={`tilt-container pb-[480px] pt-6 sm:pt-9 ${hasEntered ? '' : 'page-enter'}`}>
         <header className="mb-8 flex items-center justify-between gap-3">
           <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
           <div className="flex shrink-0 items-center gap-2">
@@ -734,24 +751,6 @@ function PageHeading({ eyebrow, title, description }: { eyebrow: string; title: 
   );
 }
 
-function overallRanking(users: Player[], historicalRecords: HistoricalRecord[]) {
-  const stats = users
-    .map((player) => {
-      const record = historicalRecords.find((item) => item.name === player.name);
-      const values = record?.values ?? [];
-      const playedValues = values.filter((val): val is number => val !== null && val !== undefined);
-      return { name: player.name, played: playedValues.length, net: playedValues.reduce((sum, val) => sum + val, 0) };
-    })
-    .sort((a, b) => b.net - a.net);
-
-  const ranked = stats.filter((stat) => stat.played >= 5);
-  const rankMap = new Map<PlayerName, { rank: number; tier: ReturnType<typeof rankingTier> }>();
-  ranked.forEach((stat, index) => {
-    rankMap.set(stat.name, { rank: index + 1, tier: rankingTier(index + 1, ranked.length) });
-  });
-  return rankMap;
-}
-
 function GameScreen({
   session,
   users,
@@ -789,6 +788,7 @@ function GameScreen({
   const [editingName, setEditingName] = useState<PlayerName | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [showBuyInLog, setShowBuyInLog] = useState(false);
+  const [selectedPlayerName, setSelectedPlayerName] = useState<PlayerName | null>(null);
 
   const isSessionInProgress = session.participantNames.length > 0 && !session.fundApplied;
   const rankMap = overallRanking(users, historicalRecords);
@@ -872,6 +872,7 @@ function GameScreen({
             </button>
           </div>
         </div>
+        <p className="mb-2 text-center text-xs font-bold text-[#858a9b]">이름을 클릭하여 플레이어 전적 데이터를 확인하세요</p>
         <div className="space-y-2">
           {(() => {
             const participants = users.filter((player) => session.participantNames.includes(player.name));
@@ -887,7 +888,14 @@ function GameScreen({
                     {ranked ? String(ranked.rank).padStart(2, '0') : '-'}
                   </span>
                   <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                    <span className="truncate text-base font-bold text-[#20253a]">{player.name}</span>
+                    <button
+                      type="button"
+                      className="tilt-button truncate text-left text-base font-bold text-[#20253a] hover:underline"
+                      data-testid={`button-player-analysis-${player.name}`}
+                      onClick={() => setSelectedPlayerName(player.name)}
+                    >
+                      {player.name}
+                    </button>
                     {ranked ? (
                       <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${ranked.tier.className}`}>
                         <span>{ranked.tier.icon}</span>
@@ -965,6 +973,16 @@ function GameScreen({
       </section>
 
       {showBuyInLog ? <BuyInLogModal log={buyInLog} onClose={() => setShowBuyInLog(false)} /> : null}
+      <Suspense fallback={playerAnalysisFallback}>
+        {selectedPlayerName ? (
+          <PlayerAnalysisModal
+            playerName={selectedPlayerName}
+            users={users}
+            historicalRecords={historicalRecords}
+            onClose={() => setSelectedPlayerName(null)}
+          />
+        ) : null}
+      </Suspense>
     </div>
   );
 }
@@ -1173,24 +1191,6 @@ function SettleScreen({
   );
 }
 
-function rankingTier(rank: number, total: number) {
-  if (rank === 1) return { label: '챌린저', icon: '👑', className: 'bg-gradient-to-r from-[#ffe17d] to-[#ffd000] text-[#523d00] border border-[#e6b800] shadow-xs font-extrabold' };
-  if (rank === 2) return { label: '그랜드마스터', icon: '🔥', className: 'bg-gradient-to-r from-[#ff8d82] to-[#e63928] text-white border border-[#b82314] shadow-xs font-extrabold' };
-  if (rank === 3) return { label: '마스터', icon: '🔮', className: 'bg-gradient-to-r from-[#d8b4fe] to-[#9333ea] text-white border border-[#7e22ce] shadow-xs font-bold' };
-  const otherRank = rank - 4;
-  const otherCount = Math.max(total - 3, 1);
-  const tierIndex = Math.min(5, Math.floor((otherRank * 6) / otherCount));
-  const tiers = [
-    { label: '다이아', icon: '💎', className: 'bg-[#e0f2fe] text-[#0369a1] border border-[#bae6fd]' },
-    { label: '플래티넘', icon: '🛡️', className: 'bg-[#ccfbf1] text-[#0f766e] border border-[#99f6e4]' },
-    { label: '골드', icon: '🥇', className: 'bg-[#fef9c3] text-[#a16207] border border-[#fef08a]' },
-    { label: '실버', icon: '🥈', className: 'bg-[#f1f5f9] text-[#475569] border border-[#e2e8f0]' },
-    { label: '브론즈', icon: '🥉', className: 'bg-[#ffedd5] text-[#9a3412] border border-[#fed7aa]' },
-    { label: '아이언', icon: '⚙️', className: 'bg-[#f3f4f6] text-[#6b7280] border border-[#e5e7eb]' },
-  ];
-  return tiers[tierIndex];
-}
-
 function computeTierRanges(totalRanked: number) {
   const ranges: { label: string; icon: string; className: string; rankRange: string }[] = [];
   for (let rank = 1; rank <= totalRanked; rank++) {
@@ -1258,6 +1258,7 @@ function RankingScreen({
   const [selectedDate, setSelectedDate] = useState(historyDates[historyDates.length - 1] ?? '');
   const [isAdmin, setIsAdmin] = useState(false);
   const [showTierTable, setShowTierTable] = useState(false);
+  const [selectedPlayerName, setSelectedPlayerName] = useState<PlayerName | null>(null);
 
   const handleAdminToggle = () => {
     if (isAdmin) {
@@ -1363,6 +1364,8 @@ function RankingScreen({
         </div>
       </div>
 
+      <p className="rise-in mb-2 text-center text-xs font-bold text-[#858a9b]">이름을 클릭하여 플레이어 전적 데이터를 확인하세요</p>
+
       <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
         <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4">
           <div>
@@ -1405,7 +1408,14 @@ function RankingScreen({
                       <div className="flex w-6 justify-center">{rankChange}</div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p>
+                      <button
+                        type="button"
+                        className="tilt-button text-sm font-bold text-[#20253a] hover:underline"
+                        data-testid={`button-player-analysis-${stat.player.name}`}
+                        onClick={() => setSelectedPlayerName(stat.player.name)}
+                      >
+                        {stat.player.name}
+                      </button>
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${tier.className}`}>
                         <span>{tier.icon}</span>
                         <span>{tier.label}</span>
@@ -1451,6 +1461,16 @@ function RankingScreen({
       </button>
 
       {showTierTable ? <TierTableModal totalRanked={rankedPlayers.length} onClose={() => setShowTierTable(false)} /> : null}
+      <Suspense fallback={playerAnalysisFallback}>
+        {selectedPlayerName ? (
+          <PlayerAnalysisModal
+            playerName={selectedPlayerName}
+            users={users}
+            historicalRecords={historicalRecords}
+            onClose={() => setSelectedPlayerName(null)}
+          />
+        ) : null}
+      </Suspense>
 
       {unrankedPlayers.length > 0 ? (
         <section className="rise-in delay-2 mt-6 tilt-card overflow-hidden" data-testid="card-unranked-list">
@@ -1472,7 +1492,14 @@ function RankingScreen({
                       {String(index + 1).padStart(2, '0')}
                     </span>
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-[#20253a]">{stat.player.name}</p>
+                      <button
+                        type="button"
+                        className="tilt-button text-sm font-bold text-[#20253a] hover:underline"
+                        data-testid={`button-player-analysis-${stat.player.name}`}
+                        onClick={() => setSelectedPlayerName(stat.player.name)}
+                      >
+                        {stat.player.name}
+                      </button>
                       <span className="rounded-full bg-[#f1f1ee] px-2 py-0.5 text-[10px] font-bold text-[#697087]">언랭</span>
                     </div>
                     <div>
