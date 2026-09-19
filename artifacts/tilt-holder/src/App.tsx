@@ -302,6 +302,13 @@ function AppShell() {
   const totalFinalChips = settlementRows.reduce((total, row) => total + row.finalAmount, 0);
   const fundBalance = fundEntries.reduce((total, entry) => total + entry.amount, 0);
 
+  const clearExpenses = () => {
+    expenses.forEach((expense) => {
+      fetch(`/api/expenses/${encodeURIComponent(expense.id)}`, { method: 'DELETE' }).catch(console.error);
+    });
+    setExpenses([]);
+  };
+
   const saveSessionToServer = (sessionToSave: SessionState, arrowsToSave: Record<PlayerName, 'up' | 'down'>, logToSave: BuyInLogEntry[]) => {
     fetch('/api/session', {
       method: 'PUT',
@@ -329,10 +336,7 @@ function AppShell() {
     setBuyInLog([]);
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
-    expenses.forEach((expense) => {
-      fetch(`/api/expenses/${encodeURIComponent(expense.id)}`, { method: 'DELETE' }).catch(console.error);
-    });
-    setExpenses([]);
+    clearExpenses();
     saveSessionToServer(newSession, {}, []);
     setActiveTab('game');
   };
@@ -682,7 +686,10 @@ function AppShell() {
           settlementRows={settlementRows}
           expenses={expenses}
           grossFundContribution={grossFundContribution}
-          onClose={() => setShowSettlementModal(false)}
+          onClose={() => {
+            setShowSettlementModal(false);
+            clearExpenses();
+          }}
         />
       ) : null}
       <PasswordModal
