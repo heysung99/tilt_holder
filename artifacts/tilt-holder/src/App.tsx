@@ -163,6 +163,17 @@ function AppShell() {
   const [buyInLog, setBuyInLog] = useState<BuyInLogEntry[]>([]);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasEntered, setHasEntered] = useState(false);
+
+  useEffect(() => {
+    // A CSS animation targeting `transform` keeps resolving to a matrix (never
+    // truly `none`) for as long as `animation-fill-mode: both` holds it, which
+    // makes this element a containing block for `position: fixed` descendants
+    // (modals) even after the entrance animation visually settles. Dropping
+    // the animation class once it's done removes that containing block.
+    const timer = window.setTimeout(() => setHasEntered(true), 500);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const handler = (event: Event) => {
@@ -633,7 +644,7 @@ function AppShell() {
 
   return (
     <div className="tilt-shell">
-      <main className="tilt-container page-enter pb-[480px] pt-6 sm:pt-9">
+      <main className={`tilt-container pb-[480px] pt-6 sm:pt-9 ${hasEntered ? '' : 'page-enter'}`}>
         <header className="mb-8 flex items-center justify-between gap-3">
           <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
           <div className="flex shrink-0 items-center gap-2">
