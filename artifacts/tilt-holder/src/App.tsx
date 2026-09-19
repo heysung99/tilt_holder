@@ -1037,7 +1037,6 @@ function NewSessionForm({
                 data-testid={`button-select-participant-${player.name}`}
                 onClick={() => toggleParticipant(player.name)}
               >
-                {selected ? <Check size={12} /> : null}
                 <span>{player.name}</span>
               </button>
             );
