@@ -1,4 +1,6 @@
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -8,6 +10,7 @@ import {
   PolarRadiusAxis,
   Radar,
   RadarChart,
+  ReferenceLine,
   ResponsiveContainer,
   XAxis,
   YAxis,
@@ -47,6 +50,12 @@ export default function PlayerAnalysisModal({
   const radarData = computeRadarData(playerName, users, historicalRecords);
   const rankInfo = overallRanking(users, historicalRecords).get(playerName);
   const trendData = stats.history.map((value, index) => ({ game: `${index + 1}`, value }));
+  const trendColor = stats.net >= 0 ? '#16a34a' : '#dc2626';
+  let runningTotal = 0;
+  const cumulativeData = stats.history.map((value, index) => {
+    runningTotal += value;
+    return { game: `${index + 1}`, cumulative: runningTotal };
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
@@ -92,6 +101,27 @@ export default function PlayerAnalysisModal({
                 </div>
               </div>
             ) : null}
+
+            <div className="mt-6">
+              <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">cumulative profit trend</p>
+              <div className="mt-2 h-[160px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={cumulativeData}>
+                    <defs>
+                      <linearGradient id="cumulativeFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={trendColor} stopOpacity={0.35} />
+                        <stop offset="95%" stopColor={trendColor} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ececf0" vertical={false} />
+                    <XAxis dataKey="game" tick={{ fontSize: 10, fill: '#a0a4b1' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: '#a0a4b1' }} axisLine={false} tickLine={false} width={32} />
+                    <ReferenceLine y={0} stroke="#a0a4b1" strokeDasharray="3 3" />
+                    <Area type="monotone" dataKey="cumulative" stroke={trendColor} strokeWidth={2} fill="url(#cumulativeFill)" dot={{ r: 3, fill: trendColor, strokeWidth: 0 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
             <div className="mt-6">
               <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">game-by-game net</p>
