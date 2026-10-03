@@ -1378,7 +1378,7 @@ function RankingScreen({
               {selectedSeason === 'ALL' ? '5회 이상' : '1회 이상'} 참여자 · NET 누적상금 · 만원 단위
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div data-share-date-slot="true" className="flex items-center gap-2">
             <button
               type="button"
               data-share-exclude="true"
@@ -1950,24 +1950,50 @@ function shareOrDownloadCanvas(canvas: HTMLCanvasElement, fileName: string, shar
   }, 'image/png');
 }
 
+function formatShareDate(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 async function shareRankingImage(node: HTMLElement, fileName: string) {
   // The table scrolls horizontally on narrow screens, so capturing it as-is would
-  // crop columns off the right edge. Temporarily disable that scroll/clip so the
-  // shared image shows the full table, then restore the live layout afterward.
+  // crop columns off the right edge. Measure the full content width up front —
+  // the inner table has a fixed min-width regardless of the viewport — then widen
+  // the card itself to that width so every child (including the header's
+  // border-bottom, which otherwise stays snapshotted at the old narrow width)
+  // actually reflows to match before capture, instead of only resizing the output
+  // canvas after the fact.
   const scrollWrap = node.querySelector<HTMLElement>('[data-share-scroll="true"]');
   const contentEl = scrollWrap?.firstElementChild as HTMLElement | null;
+  const targetWidth = contentEl ? contentEl.scrollWidth : node.scrollWidth;
+
   const prevNodeOverflow = node.style.overflow;
+  const prevNodeWidth = node.style.width;
   const prevWrapOverflow = scrollWrap?.style.overflow ?? '';
 
   node.style.overflow = 'visible';
+  node.style.width = `${targetWidth}px`;
   if (scrollWrap) scrollWrap.style.overflow = 'visible';
 
+  const dateSlot = node.querySelector<HTMLElement>('[data-share-date-slot="true"]');
+  const dateLabel = document.createElement('span');
+  dateLabel.textContent = formatShareDate(new Date());
+  dateLabel.style.fontFamily = "'Space Mono', monospace";
+  dateLabel.style.fontSize = '12px';
+  dateLabel.style.fontWeight = '700';
+  dateLabel.style.color = '#a0a4b1';
+  dateSlot?.insertBefore(dateLabel, dateSlot.firstChild);
+
   try {
+    // Let the forced width above actually reflow the live layout before capturing.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
     const { toBlob } = await import('html-to-image');
     const blob = await toBlob(node, {
       pixelRatio: 2,
       backgroundColor: '#ffffff',
-      width: contentEl ? contentEl.scrollWidth : node.scrollWidth,
+      width: targetWidth,
       // Keep the share button itself out of the captured image.
       filter: (domNode) => !(domNode instanceof HTMLElement && domNode.dataset.shareExclude === 'true'),
     });
@@ -1977,7 +2003,9 @@ async function shareRankingImage(node: HTMLElement, fileName: string) {
     console.error(error);
   } finally {
     node.style.overflow = prevNodeOverflow;
+    node.style.width = prevNodeWidth;
     if (scrollWrap) scrollWrap.style.overflow = prevWrapOverflow;
+    dateLabel.remove();
   }
 }
 
