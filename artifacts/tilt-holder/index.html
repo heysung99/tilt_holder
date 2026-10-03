@@ -2,6 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // KakaoTalk's in-app browser opens links in its own webview instead of the
+      // system browser. Hand it straight to the OS default browser (Samsung
+      // Internet / Safari) via KakaoTalk's own URL scheme, with no in-between
+      // "open in browser" prompt. Runs before anything else loads so there's no
+      // flash of content inside the in-app browser first.
+      (function () {
+        if (/kakaotalk/i.test(navigator.userAgent)) {
+          location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>TILT HOLDER</title>
     <meta name="robots" content="index, follow" />
