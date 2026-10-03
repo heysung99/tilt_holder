@@ -1,4 +1,4 @@
-import { type ReactNode, Suspense, lazy, useEffect, useState } from 'react';
+import { type ReactNode, Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -1260,6 +1260,7 @@ function RankingScreen({
   const [isAdmin, setIsAdmin] = useState(false);
   const [showTierTable, setShowTierTable] = useState(false);
   const [selectedPlayerName, setSelectedPlayerName] = useState<PlayerName | null>(null);
+  const rankingCardRef = useRef<HTMLElement>(null);
 
   const handleAdminToggle = () => {
     if (isAdmin) {
@@ -1367,7 +1368,7 @@ function RankingScreen({
 
       <p className="rise-in mb-2 text-center text-xs font-bold text-[#858a9b]">이름을 클릭하여 플레이어 전적 데이터를 확인하세요</p>
 
-      <section className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
+      <section ref={rankingCardRef} className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
         <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4">
           <div>
             <span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">
@@ -1380,17 +1381,20 @@ function RankingScreen({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              data-share-exclude="true"
               className="tilt-button flex items-center justify-center rounded-full border border-[#dfe1ee] bg-white p-2 text-[#2d3d8f] hover:bg-[#eef0ff]"
               data-testid="button-share-ranking"
               aria-label="랭킹표 공유"
-              onClick={() => downloadRankingImage(rankedPlayers, selectedSeason === 'ALL' ? '전체' : `${selectedSeason}년`)}
+              onClick={() => {
+                if (rankingCardRef.current) shareRankingImage(rankingCardRef.current, `ranking-${selectedSeason === 'ALL' ? '전체' : selectedSeason}.png`);
+              }}
             >
               <Share2 size={16} />
             </button>
             <Trophy size={18} className="text-[#b38b1e]" />
           </div>
         </div>
-        <div className="overflow-x-auto">
+        <div data-share-scroll="true" className="overflow-x-auto">
           <div className="min-w-[650px] divide-y divide-[#ececf0]">
             {rankedPlayers.map((stat, index) => {
               const rank = index + 1;
@@ -1911,8 +1915,8 @@ function downloadSettlementImage(session: SessionState, settlementRows: Settleme
   shareOrDownloadCanvas(canvas, `settlement-${session.date}.png`, 'TILT HOLDER 정산 결과');
 }
 
-function shareOrDownloadCanvas(canvas: HTMLCanvasElement, fileName: string, shareTitle: string) {
-  const downloadViaLink = (blob: Blob) => {
+function shareOrDownloadBlob(blob: Blob, fileName: string, shareTitle?: string) {
+  const downloadViaLink = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.download = fileName;
@@ -1923,97 +1927,58 @@ function shareOrDownloadCanvas(canvas: HTMLCanvasElement, fileName: string, shar
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
+  const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+  // Omitting `title` when the caller doesn't pass one keeps share sheets (e.g. KakaoTalk)
+  // from attaching caption text alongside the image — just the picture gets shared.
+  const shareData: ShareData = shareTitle ? { files: [file], title: shareTitle } : { files: [file] };
+  if (nav.canShare && nav.canShare(shareData)) {
+    navigator.share(shareData).catch(() => {
+      // Share sheet dismissed or unsupported mid-flight; fall back to a direct download.
+      downloadViaLink();
+    });
+    return;
+  }
+
+  downloadViaLink();
+}
+
+function shareOrDownloadCanvas(canvas: HTMLCanvasElement, fileName: string, shareTitle: string) {
   canvas.toBlob((blob) => {
     if (!blob) return;
-
-    const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
-    const file = new File([blob], fileName, { type: 'image/png' });
-    if (nav.canShare && nav.canShare({ files: [file] })) {
-      navigator.share({ files: [file], title: shareTitle }).catch(() => {
-        // Share sheet dismissed or unsupported mid-flight; fall back to a direct download.
-        downloadViaLink(blob);
-      });
-      return;
-    }
-
-    downloadViaLink(blob);
+    shareOrDownloadBlob(blob, fileName, shareTitle);
   }, 'image/png');
 }
 
-function downloadRankingImage(
-  rankedPlayers: { player: Player; net: number; winRate: number; wins: number; losses: number; played: number }[],
-  seasonLabel: string,
-) {
-  const ROW_H = 64;
-  const estimatedHeight = 170 + 46 + Math.max(rankedPlayers.length, 1) * ROW_H + 50;
+async function shareRankingImage(node: HTMLElement, fileName: string) {
+  // The table scrolls horizontally on narrow screens, so capturing it as-is would
+  // crop columns off the right edge. Temporarily disable that scroll/clip so the
+  // shared image shows the full table, then restore the live layout afterward.
+  const scrollWrap = node.querySelector<HTMLElement>('[data-share-scroll="true"]');
+  const contentEl = scrollWrap?.firstElementChild as HTMLElement | null;
+  const prevNodeOverflow = node.style.overflow;
+  const prevWrapOverflow = scrollWrap?.style.overflow ?? '';
 
-  const canvas = document.createElement('canvas');
-  canvas.width = 800;
-  canvas.height = estimatedHeight;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  node.style.overflow = 'visible';
+  if (scrollWrap) scrollWrap.style.overflow = 'visible';
 
-  ctx.fillStyle = '#f8f9fc';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = '#2d3d8f';
-  ctx.fillRect(0, 0, canvas.width, 130);
-
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 34px sans-serif';
-  ctx.fillText('TILT HOLDER - 랭킹', 40, 58);
-
-  ctx.fillStyle = '#e9ef76';
-  ctx.font = 'bold 19px sans-serif';
-  ctx.fillText(`${seasonLabel} · NET 누적상금 기준`, 40, 97);
-
-  let y = 170;
-  ctx.fillStyle = '#eef0ff';
-  ctx.fillRect(40, y, 720, 46);
-  ctx.fillStyle = '#2d3d8f';
-  ctx.font = 'bold 15px sans-serif';
-  ctx.fillText('순위', 60, y + 29);
-  ctx.fillText('이름', 140, y + 29);
-  ctx.fillText('티어', 320, y + 29);
-  ctx.fillText('NET 누적상금', 460, y + 29);
-  ctx.fillText('승률', 620, y + 29);
-  y += 46;
-
-  if (rankedPlayers.length === 0) {
-    ctx.fillStyle = '#697087';
-    ctx.font = '17px sans-serif';
-    ctx.fillText('아직 랭크에 오른 참여자가 없습니다.', 60, y + 34);
+  try {
+    const { toBlob } = await import('html-to-image');
+    const blob = await toBlob(node, {
+      pixelRatio: 2,
+      backgroundColor: '#ffffff',
+      width: contentEl ? contentEl.scrollWidth : node.scrollWidth,
+      // Keep the share button itself out of the captured image.
+      filter: (domNode) => !(domNode instanceof HTMLElement && domNode.dataset.shareExclude === 'true'),
+    });
+    if (!blob) return;
+    shareOrDownloadBlob(blob, fileName);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    node.style.overflow = prevNodeOverflow;
+    if (scrollWrap) scrollWrap.style.overflow = prevWrapOverflow;
   }
-
-  rankedPlayers.forEach((stat, idx) => {
-    const rank = idx + 1;
-    const tier = rankingTier(rank, rankedPlayers.length);
-
-    ctx.fillStyle = idx % 2 === 0 ? '#ffffff' : '#f3f4ff';
-    ctx.fillRect(40, y, 720, ROW_H);
-
-    ctx.fillStyle = rank === 1 ? '#b38b1e' : '#20253a';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(`${rank}`, 60, y + 39);
-
-    ctx.fillStyle = '#20253a';
-    ctx.fillText(stat.player.name, 140, y + 39);
-
-    ctx.font = '16px sans-serif';
-    ctx.fillText(`${tier.icon} ${tier.label}`, 320, y + 39);
-
-    ctx.fillStyle = stat.net >= 0 ? '#16a34a' : '#dc2626';
-    ctx.font = 'bold 19px sans-serif';
-    ctx.fillText(`${stat.net >= 0 ? '+' : ''}${stat.net.toFixed(1)}만원`, 460, y + 39);
-
-    ctx.fillStyle = '#596078';
-    ctx.font = '17px sans-serif';
-    ctx.fillText(`${Math.round(stat.winRate * 100)}% (${stat.wins}승 ${stat.losses}패)`, 620, y + 39);
-
-    y += ROW_H;
-  });
-
-  shareOrDownloadCanvas(canvas, `ranking-${seasonLabel}.png`, 'TILT HOLDER 랭킹');
 }
 
 type PasswordModalConfig = {
