@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, expensesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { requireAdmin } from "../lib/admin.js";
 
 const router: IRouter = Router();
 
@@ -38,11 +39,12 @@ router.post("/expenses", async (req, res) => {
       amount,
       time: time || '방금 전',
       settled: settled ?? false,
-    }).onConflictDoUpdate({
-      target: expensesTable.id,
-      set: { title, payer, amount, time, settled },
-    }).returning();
+    }).onConflictDoNothing().returning();
 
+    if (!inserted) {
+      res.status(409).json({ error: "Expense already exists" });
+      return;
+    }
     res.status(201).json(inserted);
   } catch (error) {
     console.error("Failed to save expense:", error);
@@ -52,7 +54,7 @@ router.post("/expenses", async (req, res) => {
 
 router.patch("/expenses/:id", async (req, res) => {
   try {
-    const id = req.params.id;
+    const id = String(req.params.id);
     const { settled } = req.body;
     if (!db) {
       res.status(503).json({ error: "Database not available" });
@@ -71,9 +73,9 @@ router.patch("/expenses/:id", async (req, res) => {
   }
 });
 
-router.delete("/expenses/:id", async (req, res) => {
+router.delete("/expenses/:id", requireAdmin, async (req, res) => {
   try {
-    const id = req.params.id;
+    const id = String(req.params.id);
     if (!db) {
       res.status(503).json({ error: "Database not available" });
       return;

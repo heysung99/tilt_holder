@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, fundEntriesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { requireAdmin } from "../lib/admin.js";
 
 const router: IRouter = Router();
 
@@ -31,16 +32,19 @@ router.post("/fund", async (req, res) => {
       return;
     }
 
+    // Insert-only: this endpoint is open to everyone, so it must not be able to
+    // rewrite an existing entry's amount by reusing its id.
     const [inserted] = await db.insert(fundEntriesTable).values({
       id,
       title,
       meta: meta || '',
       amount,
-    }).onConflictDoUpdate({
-      target: fundEntriesTable.id,
-      set: { title, meta, amount },
-    }).returning();
+    }).onConflictDoNothing().returning();
 
+    if (!inserted) {
+      res.status(409).json({ error: "Fund entry already exists" });
+      return;
+    }
     res.status(201).json(inserted);
   } catch (error) {
     console.error("Failed to save fund entry:", error);
@@ -48,9 +52,9 @@ router.post("/fund", async (req, res) => {
   }
 });
 
-router.delete("/fund/:id", async (req, res) => {
+router.delete("/fund/:id", requireAdmin, async (req, res) => {
   try {
-    const id = req.params.id;
+    const id = String(req.params.id);
     if (!db) {
       res.status(503).json({ error: "Database not available" });
       return;

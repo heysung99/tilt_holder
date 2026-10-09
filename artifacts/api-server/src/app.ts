@@ -1,8 +1,9 @@
 import express from "express";
-import cors from "cors";
 import pinoHttpPkg from "pino-http";
 import { logger } from "./lib/logger.js";
 
+import adminRouter from "./routes/admin.js";
+import bootstrapRouter from "./routes/bootstrap.js";
 import usersRouter from "./routes/users.js";
 import gamesRouter from "./routes/games.js";
 import fundRouter from "./routes/fund.js";
@@ -33,10 +34,11 @@ app.use(
   })
 );
 
-app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use("/api", adminRouter);
+app.use("/api", bootstrapRouter);
 app.use("/api", usersRouter);
 app.use("/api", gamesRouter);
 app.use("/api", fundRouter);

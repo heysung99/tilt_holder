@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
 import { db, currentSessionTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import { requireAdmin } from "../lib/admin.js";
 
 const router: IRouter = Router();
-const SESSION_ID = 1;
+export const SESSION_ID = 1;
 
 router.get("/session", async (_req, res) => {
   try {
@@ -67,7 +68,7 @@ router.put("/session", async (req, res) => {
   }
 });
 
-router.delete("/session", async (_req, res) => {
+router.delete("/session", requireAdmin, async (_req, res) => {
   try {
     if (!db) {
       res.status(503).json({ error: "Database not available" });

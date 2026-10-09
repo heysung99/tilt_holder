@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, gamesTable } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
+import { requireAdmin } from "../lib/admin.js";
 
 const router: IRouter = Router();
 
@@ -18,7 +19,7 @@ router.get("/games", async (_req, res) => {
   }
 });
 
-router.post("/games", async (req, res) => {
+router.post("/games", requireAdmin, async (req, res) => {
   try {
     const { date, gameName, hostName, bankName, participantNames, results } = req.body;
     if (!date || !gameName || !participantNames || !results) {
@@ -31,17 +32,19 @@ router.post("/games", async (req, res) => {
       return;
     }
 
-    // Upsert or insert game for date
-    await db.delete(gamesTable).where(eq(gamesTable.date, date));
-
-    const [inserted] = await db.insert(gamesTable).values({
-      date,
-      gameName,
-      hostName,
-      bankName,
-      participantNames,
-      results,
-    }).returning();
+    // Replace the game for this date atomically so a failed insert can't leave the date wiped.
+    const inserted = await db.transaction(async (tx) => {
+      await tx.delete(gamesTable).where(eq(gamesTable.date, date));
+      const [row] = await tx.insert(gamesTable).values({
+        date,
+        gameName,
+        hostName,
+        bankName,
+        participantNames,
+        results,
+      }).returning();
+      return row;
+    });
 
     res.status(201).json(inserted);
   } catch (error) {
@@ -50,9 +53,9 @@ router.post("/games", async (req, res) => {
   }
 });
 
-router.delete("/games/:date", async (req, res) => {
+router.delete("/games/:date", requireAdmin, async (req, res) => {
   try {
-    const date = req.params.date;
+    const date = String(req.params.date);
     if (!db) {
       res.status(503).json({ error: "Database not available" });
       return;

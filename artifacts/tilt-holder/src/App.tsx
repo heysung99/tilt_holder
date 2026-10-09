@@ -148,6 +148,48 @@ const initialExpenses: ExpenseEntry[] = [];
 
 const initialFundEntries: FundEntry[] = [];
 
+class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+  }
+}
+
+// Verified against the server by PasswordModal and kept in memory only, so it's
+// gone on reload and never written to the bundle or storage.
+let adminPassword: string | null = null;
+
+async function api(path: string, options: { method?: string; body?: unknown; admin?: boolean } = {}) {
+  const method = options.method ?? 'GET';
+  const headers: Record<string, string> = {};
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (options.admin && adminPassword) headers['x-admin-password'] = adminPassword;
+
+  const response = await fetch(path, {
+    method,
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  });
+  if (!response.ok) throw new ApiError(response.status, `${method} ${path} failed with ${response.status}`);
+  return response;
+}
+
+type ServerGame = { date: string; results: Record<string, number> | null };
+
+function buildHistory(games: ServerGame[]) {
+  const dates = [...new Set(games.map((game) => game.date))];
+  const valuesByName = new Map<string, (number | null)[]>();
+  games.forEach((game) => {
+    const dateIndex = dates.indexOf(game.date);
+    Object.entries(game.results ?? {}).forEach(([name, value]) => {
+      const values = valuesByName.get(name) ?? new Array(dates.length).fill(null);
+      values[dateIndex] = value;
+      valuesByName.set(name, values);
+    });
+  });
+  const records: HistoricalRecord[] = [...valuesByName].map(([name, values]) => ({ name, values }));
+  return { dates, records };
+}
+
 function AppShell() {
   const [activeTab, setActiveTab] = useState<TabKey>('game');
   const [users, setUsers] = useState<Player[]>(initialPlayers);
@@ -230,78 +272,67 @@ function AppShell() {
     setPasswordModalConfig({ title, onSuccess });
   };
 
-  const fetchAppData = () => {
-    return Promise.all([
-      fetch('/api/users').then((r) => (r.ok ? r.json() : [])),
-      fetch('/api/expenses').then((r) => (r.ok ? r.json() : [])),
-      fetch('/api/fund').then((r) => (r.ok ? r.json() : [])),
-      fetch('/api/games').then((r) => (r.ok ? r.json() : [])),
-      fetch('/api/session').then((r) => (r.ok ? r.json() : null)),
-    ])
-      .then(([serverUsers, serverExpenses, serverFund, serverGames, serverSession]) => {
-        if (Array.isArray(serverUsers) && serverUsers.length > 0) {
-          setUsers(serverUsers);
-        }
-        if (Array.isArray(serverExpenses)) {
-          setExpenses(serverExpenses);
-        }
-        if (Array.isArray(serverFund)) {
-          setFundEntries(serverFund);
-        }
-        if (serverSession && !serverSession.fundApplied) {
-          setSession({
-            date: serverSession.date,
-            gameName: serverSession.gameName,
-            participantNames: serverSession.participantNames,
-            buyIns: serverSession.buyIns,
-            finalAmounts: serverSession.finalAmounts,
-            hostName: serverSession.hostName,
-            bankName: serverSession.bankName,
-            isFinished: serverSession.isFinished,
-            fundApplied: serverSession.fundApplied,
-          });
-          setBuyInArrows(serverSession.buyInArrows ?? {});
-          setBuyInLog(serverSession.buyInLog ?? []);
-        }
-        if (Array.isArray(serverGames) && serverGames.length > 0) {
-          setHistoryDates((currentDates) => {
-            const nextDates = [...currentDates];
-            serverGames.forEach((game: { date: string }) => {
-              if (!nextDates.includes(game.date)) {
-                nextDates.push(game.date);
-              }
-            });
+  // The server is the source of truth: every load/refresh replaces local state
+  // wholesale, so games deleted or sessions finished on another phone disappear here too.
+  const fetchAppData = async () => {
+    try {
+      const response = await api('/api/bootstrap');
+      const data = await response.json();
 
-            setHistoricalRecords((currentRecords) => {
-              const nextRecords = [...currentRecords];
-              serverGames.forEach((game: { date: string; results: Record<string, number> }) => {
-                const dateIndex = nextDates.indexOf(game.date);
-                const resultsMap = new Map(Object.entries(game.results || {}));
+      if (Array.isArray(data.users) && data.users.length > 0) {
+        setUsers(data.users);
+      }
+      setExpenses(Array.isArray(data.expenses) ? data.expenses : []);
+      setFundEntries(Array.isArray(data.fund) ? data.fund : []);
 
-                resultsMap.forEach((value, name) => {
-                  let record = nextRecords.find((r) => r.name === name);
-                  if (!record) {
-                    record = { name, values: [] };
-                    nextRecords.push(record);
-                  }
-                  const values = [...record.values];
-                  while (values.length <= dateIndex) {
-                    values.push(null);
-                  }
-                  values[dateIndex] = value;
-                  record.values = values;
-                });
-              });
-              return nextRecords;
-            });
+      const serverSession = data.session;
+      if (serverSession && !serverSession.fundApplied) {
+        setSession({
+          date: serverSession.date,
+          gameName: serverSession.gameName,
+          participantNames: serverSession.participantNames,
+          buyIns: serverSession.buyIns,
+          finalAmounts: serverSession.finalAmounts,
+          hostName: serverSession.hostName,
+          bankName: serverSession.bankName,
+          isFinished: serverSession.isFinished,
+          fundApplied: serverSession.fundApplied,
+        });
+        setBuyInArrows(serverSession.buyInArrows ?? {});
+        setBuyInLog(serverSession.buyInLog ?? []);
+      } else {
+        // Without this, a phone still showing a game someone else already settled
+        // would recreate it on the server the next time buy-ins are saved.
+        setSession(initialSession);
+        setBuyInArrows({});
+        setBuyInLog([]);
+        setIsEditingBuyIns(false);
+        setBuyInEditSnapshot(null);
+      }
 
-            return nextDates;
-          });
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to fetch from central DB:', err);
-      });
+      const { dates, records } = buildHistory(Array.isArray(data.games) ? data.games : []);
+      setHistoryDates(dates);
+      setHistoricalRecords(records);
+    } catch (err) {
+      console.error('Failed to fetch from central DB:', err);
+    }
+  };
+
+  const syncErrorPendingRef = useRef(false);
+  // Edits are applied on screen before the server confirms them; when a save fails,
+  // say so and reload the server's state instead of silently showing unsaved data.
+  const handleSyncError = (error: unknown) => {
+    console.error(error);
+    if (syncErrorPendingRef.current) return;
+    syncErrorPendingRef.current = true;
+    const status = error instanceof ApiError ? error.status : null;
+    const reason = status === 401 || status === 429 || status === 503
+      ? '관리자 인증이 필요해요.'
+      : '서버에 저장하지 못했어요.';
+    window.alert(`${reason} 서버의 최신 데이터로 다시 불러올게요.`);
+    fetchAppData().finally(() => {
+      syncErrorPendingRef.current = false;
+    });
   };
 
   useEffect(() => {
@@ -334,19 +365,16 @@ function AppShell() {
 
   const clearExpenses = () => {
     expenses.forEach((expense) => {
-      fetch(`/api/expenses/${encodeURIComponent(expense.id)}`, { method: 'DELETE' }).catch(console.error);
+      api(`/api/expenses/${encodeURIComponent(expense.id)}`, { method: 'DELETE', admin: true }).catch(handleSyncError);
     });
     setExpenses([]);
   };
 
   const saveSessionToServer = (sessionToSave: SessionState, arrowsToSave: Record<PlayerName, 'up' | 'down'>, logToSave: BuyInLogEntry[]) => {
-    fetch('/api/session', {
+    api('/api/session', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...sessionToSave, buyInArrows: arrowsToSave, buyInLog: logToSave }),
-    }).catch((err) => {
-      console.error('Failed to save session to server database:', err);
-    });
+      body: { ...sessionToSave, buyInArrows: arrowsToSave, buyInLog: logToSave },
+    }).catch(handleSyncError);
   };
 
   const createSession = (draft: { date: string; participantNames: PlayerName[] }) => {
@@ -432,11 +460,7 @@ function AppShell() {
     const style = avatarStyles[users.length % avatarStyles.length];
     const newUser = { name: trimmedName, score: 0, color: style[0], text: style[1] };
     setUsers((current) => [...current, newUser]);
-    fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newUser),
-    }).catch(console.error);
+    api('/api/users', { method: 'POST', body: newUser }).catch(handleSyncError);
     return true;
   };
 
@@ -444,11 +468,12 @@ function AppShell() {
     const trimmedName = nextName.trim();
     if (!trimmedName || currentName === trimmedName || users.some((user) => user.name === trimmedName)) return false;
     setUsers((current) => current.map((user) => user.name === currentName ? { ...user, name: trimmedName } : user));
-    fetch(`/api/users/${encodeURIComponent(currentName)}`, {
+    setHistoricalRecords((current) => current.map((record) => record.name === currentName ? { ...record, name: trimmedName } : record));
+    api(`/api/users/${encodeURIComponent(currentName)}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nextName: trimmedName }),
-    }).catch(console.error);
+      body: { nextName: trimmedName },
+      admin: true,
+    }).catch(handleSyncError);
     setSession((current) => {
       const participantNames = current.participantNames.map((name) => name === currentName ? trimmedName : name);
       const buyIns = { ...current.buyIns };
@@ -480,17 +505,8 @@ function AppShell() {
     const fundItem = { id, title, meta: `모임 공금 · ${formatSessionDate(session.date)}`, amount: -amount };
     setFundEntries((current) => [...current, fundItem]);
 
-    fetch('/api/expenses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(expense),
-    }).catch(console.error);
-
-    fetch('/api/fund', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fundItem),
-    }).catch(console.error);
+    api('/api/expenses', { method: 'POST', body: expense }).catch(handleSyncError);
+    api('/api/fund', { method: 'POST', body: fundItem }).catch(handleSyncError);
   };
 
   const addFundDeposit = (amount: number) => {
@@ -498,11 +514,7 @@ function AppShell() {
     const fundItem = { id, title: '공금 직접 입금', meta: `오늘 · ${formatSessionDate(session.date)}`, amount };
     setFundEntries((current) => [...current, fundItem]);
 
-    fetch('/api/fund', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fundItem),
-    }).catch(console.error);
+    api('/api/fund', { method: 'POST', body: fundItem }).catch(handleSyncError);
   };
 
   const finishSession = () => {
@@ -516,20 +528,18 @@ function AppShell() {
       participantResultsObj[row.name] = netManwon;
     });
 
-    fetch('/api/games', {
+    api('/api/games', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      body: {
         date: session.date,
         gameName: session.gameName,
         hostName: session.hostName,
         bankName: session.bankName,
         participantNames: session.participantNames,
         results: participantResultsObj,
-      }),
-    }).catch((err) => {
-      console.error('Failed to sync game result to server database:', err);
-    });
+      },
+      admin: true,
+    }).catch(handleSyncError);
 
     setHistoryDates((currentDates) => {
       const dateIndex = currentDates.indexOf(targetDate);
@@ -580,22 +590,14 @@ function AppShell() {
       };
       setFundEntries((current) => [...current, fundItem]);
 
-      fetch('/api/fund', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(fundItem),
-      }).catch((err) => {
-        console.error('Failed to sync settlement fund entry to server database:', err);
-      });
+      api('/api/fund', { method: 'POST', body: fundItem }).catch(handleSyncError);
     }
     setSession((current) => ({ ...current, isFinished: true, fundApplied: true }));
     setBuyInArrows({});
     setBuyInLog([]);
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
-    fetch('/api/session', { method: 'DELETE' }).catch((err) => {
-      console.error('Failed to clear session from server database:', err);
-    });
+    api('/api/session', { method: 'DELETE', admin: true }).catch(handleSyncError);
   };
 
   const deleteHistoryDate = (dateToDelete: string) => {
@@ -611,36 +613,15 @@ function AppShell() {
       })
     );
 
-    fetch(`/api/games/${encodeURIComponent(dateToDelete)}`, {
-      method: 'DELETE',
-    }).catch(console.error);
+    api(`/api/games/${encodeURIComponent(dateToDelete)}`, { method: 'DELETE', admin: true }).catch(handleSyncError);
   };
 
   const deleteFundEntry = (entryId: string) => {
     setExpenses((current) => current.filter((e) => e.id !== entryId));
     setFundEntries((current) => current.filter((f) => f.id !== entryId));
 
-    fetch(`/api/fund/${encodeURIComponent(entryId)}`, {
-      method: 'DELETE',
-    }).catch(console.error);
-    fetch(`/api/expenses/${encodeURIComponent(entryId)}`, {
-      method: 'DELETE',
-    }).catch(console.error);
-  };
-
-  const completeSettlement = () => {
-    const pwd = window.prompt('관리자 비밀번호를 입력하세요 :');
-    if (pwd !== '0511') {
-      window.alert('비밀번호가 틀렸습니다.');
-      return;
-    }
-    if (totalBuyIns !== totalFinalChips) {
-      window.alert('정산이 제대로 되지 않았습니다.');
-      return;
-    }
-    window.alert('정산이 완료되었습니다.');
-    finishSession();
-    setShowSettlementModal(true);
+    api(`/api/fund/${encodeURIComponent(entryId)}`, { method: 'DELETE', admin: true }).catch(handleSyncError);
+    api(`/api/expenses/${encodeURIComponent(entryId)}`, { method: 'DELETE', admin: true }).catch(handleSyncError);
   };
 
   return (
@@ -699,6 +680,7 @@ function AppShell() {
             onFinalAmountChange={updateFinalAmount}
             onAddExpense={addExpense}
             onFinishSession={requestCompleteSettlement}
+            onSyncError={handleSyncError}
           />
         )}
         {activeTab === 'ranking' && (
@@ -1111,6 +1093,7 @@ function SettleScreen({
   onFinalAmountChange,
   onAddExpense,
   onFinishSession,
+  onSyncError,
 }: {
   session: SessionState;
   expenses: ExpenseEntry[];
@@ -1122,6 +1105,7 @@ function SettleScreen({
   onFinalAmountChange: (name: PlayerName, value: number) => void;
   onAddExpense: (title: string, amount: number) => void;
   onFinishSession: () => void;
+  onSyncError: (error: unknown) => void;
 }) {
   const [showExpense, setShowExpense] = useState(false);
   const [settled, setSettled] = useState<string[]>(() => expenses.filter((e: ExpenseEntry & { settled?: boolean }) => e.settled).map((e) => e.id));
@@ -1129,16 +1113,12 @@ function SettleScreen({
   const expenseTotal = expenses.reduce((total, expense) => total + expense.amount, 0);
 
   const markSettled = (id: string) => {
-    setSettled((current) => {
-      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-      const isNowSettled = next.includes(id);
-      fetch(`/api/expenses/${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settled: isNowSettled }),
-      }).catch(console.error);
-      return next;
-    });
+    const isNowSettled = !settled.includes(id);
+    setSettled((current) => (isNowSettled ? [...current, id] : current.filter((item) => item !== id)));
+    api(`/api/expenses/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      body: { settled: isNowSettled },
+    }).catch(onSyncError);
   };
 
   return (
@@ -2022,17 +2002,34 @@ function PasswordModal({
   onClose: () => void;
 }) {
   const [pwd, setPwd] = useState('');
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
 
   if (!config) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const close = () => {
+    setPwd('');
+    setError(null);
+    onClose();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pwd === '0511') {
+    if (isChecking) return;
+    setIsChecking(true);
+    try {
+      await api('/api/admin/verify', { method: 'POST', body: { password: pwd } });
+      adminPassword = pwd;
       config.onSuccess();
-      onClose();
-    } else {
-      setError(true);
+      close();
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : null;
+      if (status === 401) setError('올바르지 않습니다.');
+      else if (status === 429) setError('시도 횟수가 너무 많아요. 10분 뒤 다시 시도해주세요.');
+      else if (status === 503) setError('서버에 관리자 코드가 설정되지 않았어요.');
+      else setError('서버에 연결할 수 없어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsChecking(false);
     }
   };
 
@@ -2045,16 +2042,16 @@ function PasswordModal({
         <input
           type="password"
           value={pwd}
-          onChange={(e) => { setPwd(e.target.value); setError(false); }}
+          onChange={(e) => { setPwd(e.target.value); setError(null); }}
           className="mt-4 h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm outline-none focus:border-[#2d3d8f]"
           placeholder="코드 입력"
           autoFocus
         />
-        {error ? <p className="mt-1.5 text-xs font-semibold text-[#bd604d]">올바르지 않습니다.</p> : null}
+        {error ? <p className="mt-1.5 text-xs font-semibold text-[#bd604d]">{error}</p> : null}
 
         <div className="mt-5 flex gap-2">
-          <button type="submit" className="tilt-button flex-1 rounded-xl bg-[#2d3d8f] px-4 py-2.5 text-xs font-bold text-white">확인</button>
-          <button type="button" onClick={onClose} className="tilt-button rounded-xl border border-[#dfe1ee] bg-white px-4 py-2.5 text-xs font-bold text-[#697087]">취소</button>
+          <button type="submit" disabled={isChecking} className="tilt-button flex-1 rounded-xl bg-[#2d3d8f] px-4 py-2.5 text-xs font-bold text-white disabled:opacity-60">{isChecking ? '확인 중...' : '확인'}</button>
+          <button type="button" onClick={close} className="tilt-button rounded-xl border border-[#dfe1ee] bg-white px-4 py-2.5 text-xs font-bold text-[#697087]">취소</button>
         </div>
       </form>
     </div>
