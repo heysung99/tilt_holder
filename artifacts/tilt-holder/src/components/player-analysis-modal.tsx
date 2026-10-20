@@ -28,12 +28,13 @@ import {
 } from '@/lib/player-stats';
 import { shareElementImage, withTemporaryStyles } from '@/lib/share-image';
 
-function StatTile({ label, value, tone }: { label: string; value: string; tone?: 'positive' | 'negative' }) {
+function StatTile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'positive' | 'negative' }) {
   const color = tone === 'positive' ? 'text-[#16a34a]' : tone === 'negative' ? 'text-[#dc2626]' : 'text-[#20253a]';
   return (
     <div className="rounded-xl bg-[#fafaf6] p-3 text-center">
       <p className="text-[10px] font-semibold text-[#858a9b]">{label}</p>
       <p className={`mono mt-1 text-sm font-bold ${color}`}>{value}</p>
+      {sub ? <p className="mt-0.5 text-[11px] font-semibold text-[#858a9b]">{sub}</p> : null}
     </div>
   );
 }
@@ -116,7 +117,7 @@ export default function PlayerAnalysisModal({
             <div className="mt-4 grid grid-cols-3 gap-2">
               <StatTile label="총 순손익" value={formatManwon(stats.net)} tone={stats.net >= 0 ? 'positive' : 'negative'} />
               <StatTile label="참여 횟수" value={`${stats.played}회`} />
-              <StatTile label="승률" value={`${Math.round(stats.winRate * 100)}% (${stats.wins}승 ${stats.losses}패)`} />
+              <StatTile label="승률" value={`${Math.round(stats.winRate * 100)}%`} sub={`${stats.wins}승 ${stats.losses}패`} />
               <StatTile label="평균 손익" value={formatManwon(stats.avg)} tone={stats.avg >= 0 ? 'positive' : 'negative'} />
               <StatTile label="최고 기록" value={formatManwon(stats.best)} tone="positive" />
               <StatTile label="최저 기록" value={formatManwon(stats.worst)} tone="negative" />
