@@ -1,3 +1,5 @@
+import { useRef, useState } from 'react';
+import { Share2 } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -24,6 +26,7 @@ import {
   formatManwon,
   overallRanking,
 } from '@/lib/player-stats';
+import { shareElementImage, withTemporaryStyles } from '@/lib/share-image';
 
 function StatTile({ label, value, tone }: { label: string; value: string; tone?: 'positive' | 'negative' }) {
   const color = tone === 'positive' ? 'text-[#16a34a]' : tone === 'negative' ? 'text-[#dc2626]' : 'text-[#20253a]';
@@ -46,6 +49,26 @@ export default function PlayerAnalysisModal({
   historicalRecords: HistoricalRecord[];
   onClose: () => void;
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleShare = async () => {
+    const card = cardRef.current;
+    if (!card || isSharing) return;
+    setIsSharing(true);
+    // The card scrolls inside a viewport-height box; lift that cap while capturing so
+    // the image includes every chart, not just what's scrolled into view.
+    const { scrollTop } = card;
+    const restore = withTemporaryStyles(card, { maxHeight: 'none', overflow: 'visible' });
+    try {
+      await shareElementImage(card, `player-${playerName}.png`);
+    } finally {
+      restore();
+      card.scrollTop = scrollTop;
+      setIsSharing(false);
+    }
+  };
+
   const stats = computePlayerStats(playerName, historicalRecords);
   const radarData = computeRadarData(playerName, users, historicalRecords);
   const rankInfo = overallRanking(users, historicalRecords).get(playerName);
@@ -59,7 +82,7 @@ export default function PlayerAnalysisModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-      <div className="rise-in max-h-[88vh] w-full max-w-[420px] overflow-y-auto rounded-[24px] bg-white p-6 shadow-2xl">
+      <div ref={cardRef} className="rise-in max-h-[88vh] w-full max-w-[420px] overflow-y-auto rounded-[24px] bg-white p-6 shadow-2xl">
         <div className="flex items-center justify-between border-b border-[#ececf0] pb-4">
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-bold text-[#20253a]">{playerName}</h3>
@@ -70,7 +93,20 @@ export default function PlayerAnalysisModal({
               </span>
             ) : null}
           </div>
-          <button type="button" onClick={onClose} className="rounded-full bg-[#f1f1ee] px-3 py-1 text-xs font-bold text-[#697087]" data-testid="button-close-player-analysis">닫기</button>
+          <div data-share-date-slot="true" className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              data-share-exclude="true"
+              onClick={handleShare}
+              disabled={isSharing}
+              className="tilt-button flex items-center justify-center rounded-full border border-[#dfe1ee] bg-white p-1.5 text-[#2d3d8f] hover:bg-[#eef0ff] disabled:opacity-50"
+              data-testid="button-share-player-analysis"
+              aria-label="플레이어 분석 공유"
+            >
+              <Share2 size={14} />
+            </button>
+            <button type="button" data-share-exclude="true" onClick={onClose} className="rounded-full bg-[#f1f1ee] px-3 py-1 text-xs font-bold text-[#697087]" data-testid="button-close-player-analysis">닫기</button>
+          </div>
         </div>
 
         {stats.played === 0 ? (

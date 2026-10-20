@@ -9,6 +9,7 @@ import {
   overallRanking,
   rankingTier,
 } from '@/lib/player-stats';
+import { shareElementImage, shareOrDownloadBlob, withTemporaryStyles } from '@/lib/share-image';
 import {
   ArrowUpRight,
   Banknote,
@@ -1895,46 +1896,11 @@ function downloadSettlementImage(session: SessionState, settlementRows: Settleme
   shareOrDownloadCanvas(canvas, `settlement-${session.date}.png`, 'TILT HOLDER 정산 결과');
 }
 
-function shareOrDownloadBlob(blob: Blob, fileName: string, shareTitle?: string) {
-  const downloadViaLink = () => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = fileName;
-    link.href = url;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const nav = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
-  const file = new File([blob], fileName, { type: blob.type || 'image/png' });
-  // Omitting `title` when the caller doesn't pass one keeps share sheets (e.g. KakaoTalk)
-  // from attaching caption text alongside the image — just the picture gets shared.
-  const shareData: ShareData = shareTitle ? { files: [file], title: shareTitle } : { files: [file] };
-  if (nav.canShare && nav.canShare(shareData)) {
-    navigator.share(shareData).catch(() => {
-      // Share sheet dismissed or unsupported mid-flight; fall back to a direct download.
-      downloadViaLink();
-    });
-    return;
-  }
-
-  downloadViaLink();
-}
-
 function shareOrDownloadCanvas(canvas: HTMLCanvasElement, fileName: string, shareTitle: string) {
   canvas.toBlob((blob) => {
     if (!blob) return;
     shareOrDownloadBlob(blob, fileName, shareTitle);
   }, 'image/png');
-}
-
-function formatShareDate(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
 }
 
 async function shareRankingImage(node: HTMLElement, fileName: string) {
@@ -1949,43 +1915,13 @@ async function shareRankingImage(node: HTMLElement, fileName: string) {
   const contentEl = scrollWrap?.firstElementChild as HTMLElement | null;
   const targetWidth = contentEl ? contentEl.scrollWidth : node.scrollWidth;
 
-  const prevNodeOverflow = node.style.overflow;
-  const prevNodeWidth = node.style.width;
-  const prevWrapOverflow = scrollWrap?.style.overflow ?? '';
-
-  node.style.overflow = 'visible';
-  node.style.width = `${targetWidth}px`;
-  if (scrollWrap) scrollWrap.style.overflow = 'visible';
-
-  const dateSlot = node.querySelector<HTMLElement>('[data-share-date-slot="true"]');
-  const dateLabel = document.createElement('span');
-  dateLabel.textContent = formatShareDate(new Date());
-  dateLabel.style.fontFamily = "'Space Mono', monospace";
-  dateLabel.style.fontSize = '12px';
-  dateLabel.style.fontWeight = '700';
-  dateLabel.style.color = '#a0a4b1';
-  dateSlot?.insertBefore(dateLabel, dateSlot.firstChild);
-
+  const restoreNode = withTemporaryStyles(node, { overflow: 'visible', width: `${targetWidth}px` });
+  const restoreWrap = scrollWrap ? withTemporaryStyles(scrollWrap, { overflow: 'visible' }) : () => {};
   try {
-    // Let the forced width above actually reflow the live layout before capturing.
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    const { toBlob } = await import('html-to-image');
-    const blob = await toBlob(node, {
-      pixelRatio: 2,
-      backgroundColor: '#ffffff',
-      width: targetWidth,
-      // Keep the share button itself out of the captured image.
-      filter: (domNode) => !(domNode instanceof HTMLElement && domNode.dataset.shareExclude === 'true'),
-    });
-    if (!blob) return;
-    shareOrDownloadBlob(blob, fileName);
-  } catch (error) {
-    console.error(error);
+    await shareElementImage(node, fileName, { width: targetWidth });
   } finally {
-    node.style.overflow = prevNodeOverflow;
-    node.style.width = prevNodeWidth;
-    if (scrollWrap) scrollWrap.style.overflow = prevWrapOverflow;
-    dateLabel.remove();
+    restoreNode();
+    restoreWrap();
   }
 }
 
