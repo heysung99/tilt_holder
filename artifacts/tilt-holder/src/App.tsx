@@ -206,6 +206,12 @@ function AppShell() {
   const [buyInArrows, setBuyInArrows] = useState<Record<PlayerName, 'up' | 'down'>>({});
   const [buyInLog, setBuyInLog] = useState<BuyInLogEntry[]>([]);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  // True when launched from the home-screen shortcut. Browsers can't tell a regular
+  // tab whether a shortcut exists, so in a normal tab the button stays visible.
+  const [isInstalled, setIsInstalled] = useState(
+    () => window.matchMedia('(display-mode: standalone)').matches
+      || (navigator as Navigator & { standalone?: boolean }).standalone === true,
+  );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasEntered, setHasEntered] = useState(false);
 
@@ -224,8 +230,16 @@ function AppShell() {
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
     };
+    const installedHandler = () => {
+      setInstallPrompt(null);
+      setIsInstalled(true);
+    };
     window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', installedHandler);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', installedHandler);
+    };
   }, []);
 
   const handleInstallClick = async () => {
@@ -233,11 +247,6 @@ function AppShell() {
       await installPrompt.prompt();
       await installPrompt.userChoice;
       setInstallPrompt(null);
-      return;
-    }
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone;
-    if (isStandalone) {
-      window.alert('이미 홈 화면에 추가되어 있습니다.');
       return;
     }
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -640,14 +649,16 @@ function AppShell() {
             >
               <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
             </button>
-            <button
-              type="button"
-              onClick={handleInstallClick}
-              className="tilt-button flex items-center gap-1.5 rounded-full border border-[#dfe1ee] bg-white px-3 py-2 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff]"
-              data-testid="button-install-shortcut"
-            >
-              <Download size={14} /> 바로가기 저장
-            </button>
+            {isInstalled ? null : (
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="tilt-button flex items-center gap-1.5 rounded-full border border-[#dfe1ee] bg-white px-3 py-2 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff]"
+                data-testid="button-install-shortcut"
+              >
+                <Download size={14} /> 바로가기 저장
+              </button>
+            )}
           </div>
         </header>
 
