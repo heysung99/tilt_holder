@@ -1,12 +1,12 @@
 import type { PushPayload } from "./push.js";
 
 const RANKED_MIN_GAMES = 5;
-const MAX_LISTED = 4;
+const MAX_LISTED = 3;
 
 type GameResults = { results: unknown };
 export type RankEntry = { name: string; rank: number };
 
-const formatManwon = (value: number) => `${value > 0 ? "+" : ""}${Math.round(value * 10) / 10}만원`;
+const formatManwon = (value: number) => `${value > 0 ? "+" : ""}${Math.round(value * 10) / 10}만`;
 
 function formatDate(date: string) {
   const [, month, day] = date.split("-");
@@ -14,8 +14,8 @@ function formatDate(date: string) {
 }
 
 function listWithOverflow(items: string[]) {
-  const shown = items.slice(0, MAX_LISTED).join(", ");
-  return items.length > MAX_LISTED ? `${shown} 외 ${items.length - MAX_LISTED}명` : shown;
+  const shown = items.slice(0, MAX_LISTED).join(" · ");
+  return items.length > MAX_LISTED ? `${shown} 외 ${items.length - MAX_LISTED}` : shown;
 }
 
 // Same ordering and threshold as the ranking tab's "전체" view.
@@ -39,10 +39,10 @@ export function computeOverallRanking(games: GameResults[]): RankEntry[] {
 }
 
 export function gameCreatedPayload(date: string, participantNames: unknown): PushPayload {
-  const names = Array.isArray(participantNames) ? participantNames.filter((n): n is string => typeof n === "string") : [];
+  const count = Array.isArray(participantNames) ? participantNames.length : 0;
   return {
-    title: `🎲 새 게임 개설 · ${formatDate(date)}`,
-    body: names.length ? `참가자 ${names.length}명: ${listWithOverflow(names)}` : "새 게임이 열렸어요.",
+    title: "🎲 게임 개설",
+    body: count ? `${formatDate(date)} · ${count}명` : formatDate(date),
     tag: `game-created-${date}`,
   };
 }
@@ -51,11 +51,11 @@ export function buyInChangePayload(previous: unknown, next: unknown): PushPayloa
   const before = (previous ?? {}) as Record<string, number>;
   const after = (next ?? {}) as Record<string, number>;
   const changes = Object.entries(after)
-    .map(([name, count]) => ({ name, count, delta: count - (before[name] ?? 0) }))
+    .map(([name, count]) => ({ name, delta: count - (before[name] ?? 0) }))
     .filter((change) => change.delta !== 0)
-    .map(({ name, count, delta }) => `${name} ${delta > 0 ? "+" : ""}${delta} (총 ${count}회)`);
+    .map(({ name, delta }) => `${name} ${delta > 0 ? "+" : ""}${delta}`);
   if (changes.length === 0) return null;
-  return { title: "💰 바이인 변동", body: listWithOverflow(changes), tag: "buy-in" };
+  return { title: "💰 바이인", body: listWithOverflow(changes), tag: "buy-in" };
 }
 
 export function settlementPayloads(
@@ -64,20 +64,20 @@ export function settlementPayloads(
   rankingBefore: RankEntry[],
   rankingAfter: RankEntry[],
 ): PushPayload[] {
-  const winners = Object.entries(results)
-    .sort(([, a], [, b]) => b - a)
-    .map(([name, value]) => `${name} ${formatManwon(value)}`);
+  const [winnerName, winnerNet] = Object.entries(results).sort(([, a], [, b]) => b - a)[0] ?? [];
 
   const previousRank = new Map(rankingBefore.map((entry) => [entry.name, entry.rank]));
   const rankChanges = rankingAfter
     .filter((entry) => previousRank.get(entry.name) !== entry.rank)
     .map((entry) => {
       const before = previousRank.get(entry.name);
-      return before === undefined ? `${entry.name} 신규 ${entry.rank}위` : `${entry.name} ${before}→${entry.rank}위`;
+      if (before === undefined) return `${entry.name} NEW ${entry.rank}위`;
+      return `${entry.name} ${entry.rank < before ? "▲" : "▼"}${entry.rank}위`;
     });
 
-  const lines = [`결과: ${listWithOverflow(winners)}`];
-  if (rankChanges.length) lines.push(`랭킹 변동: ${listWithOverflow(rankChanges)}`);
+  const lines: string[] = [];
+  if (winnerName !== undefined && winnerNet !== undefined) lines.push(`1등 ${winnerName} ${formatManwon(winnerNet)}`);
+  if (rankChanges.length) lines.push(listWithOverflow(rankChanges));
 
   const payloads: PushPayload[] = [
     { title: `🏁 정산 완료 · ${formatDate(date)}`, body: lines.join("\n"), tag: `settled-${date}` },
@@ -87,8 +87,8 @@ export function settlementPayloads(
   const newLeader = rankingAfter[0]?.name;
   if (newLeader && newLeader !== oldLeader) {
     payloads.push({
-      title: "👑 전체 랭킹 1위 변동",
-      body: oldLeader ? `${newLeader}님이 ${oldLeader}님을 제치고 1위에 올랐어요!` : `${newLeader}님이 1위에 올랐어요!`,
+      title: "👑 1위 교체",
+      body: oldLeader ? `${oldLeader} → ${newLeader}` : newLeader,
       tag: "leader",
     });
   }
