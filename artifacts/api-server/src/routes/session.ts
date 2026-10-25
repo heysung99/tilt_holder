@@ -1,7 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db, currentSessionTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
-import { requireAdmin } from "../lib/admin.js";
+import { hasValidAdminPassword, requireAdmin } from "../lib/admin.js";
+import { buyInChangePayload, gameCreatedPayload } from "../lib/notifications.js";
+import { notifyAll, pushPublicKey, senderEndpoint, type PushPayload } from "../lib/push.js";
 
 const router: IRouter = Router();
 export const SESSION_ID = 1;
@@ -52,6 +54,10 @@ router.put("/session", async (req, res) => {
       updatedAt: new Date(),
     };
 
+    const [previous] = pushPublicKey
+      ? await db.select().from(currentSessionTable).where(eq(currentSessionTable.id, SESSION_ID))
+      : [];
+
     const [saved] = await db
       .insert(currentSessionTable)
       .values(values)
@@ -62,6 +68,16 @@ router.put("/session", async (req, res) => {
       .returning();
 
     res.status(200).json(saved);
+
+    // Creating a game is admin-only in the app, so only an admin-authenticated save
+    // announces one (this route is otherwise open and could be used to spam).
+    let payload: PushPayload | null = null;
+    if (req.body.notify === "created" && hasValidAdminPassword(req)) {
+      payload = gameCreatedPayload(date, participantNames);
+    } else if (previous && previous.date === date) {
+      payload = buyInChangePayload(previous.buyIns, buyIns);
+    }
+    if (payload) notifyAll([payload], senderEndpoint(req));
   } catch (error) {
     console.error("Failed to save current session:", error);
     res.status(500).json({ error: "Failed to save current session" });

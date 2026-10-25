@@ -44,30 +44,40 @@ function passwordMatches(candidate: string, expected: string) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-// Responds with the failure itself and returns false when the password is missing,
-// wrong, rate limited, or not configured on the server.
-export function checkAdminPassword(req: Request, res: Response, candidate: unknown) {
+type AdminCheck = "ok" | "not_configured" | "locked" | "invalid";
+
+function verifyAdminPassword(req: Request, candidate: unknown): AdminCheck {
   const expected = process.env["ADMIN_PASSWORD"];
-  if (!expected) {
-    res.status(503).json({ error: "admin_not_configured" });
-    return false;
-  }
+  if (!expected) return "not_configured";
 
   const key = clientKey(req);
   const now = Date.now();
-  if (isLockedOut(key, now)) {
-    res.status(429).json({ error: "too_many_attempts" });
-    return false;
-  }
+  if (isLockedOut(key, now)) return "locked";
 
   if (typeof candidate !== "string" || !passwordMatches(candidate, expected)) {
     recordFailure(key, now);
-    res.status(401).json({ error: "invalid_admin_password" });
-    return false;
+    return "invalid";
   }
 
   failures.delete(key);
-  return true;
+  return "ok";
+}
+
+// Responds with the failure itself and returns false when the password is missing,
+// wrong, rate limited, or not configured on the server.
+export function checkAdminPassword(req: Request, res: Response, candidate: unknown) {
+  const result = verifyAdminPassword(req, candidate);
+  if (result === "not_configured") res.status(503).json({ error: "admin_not_configured" });
+  else if (result === "locked") res.status(429).json({ error: "too_many_attempts" });
+  else if (result === "invalid") res.status(401).json({ error: "invalid_admin_password" });
+  return result === "ok";
+}
+
+// For routes open to everyone that do something extra (like notifying the group)
+// only for admins. Absent header means "not an admin request", not a failure.
+export function hasValidAdminPassword(req: Request) {
+  const candidate = req.headers["x-admin-password"];
+  return candidate !== undefined && verifyAdminPassword(req, candidate) === "ok";
 }
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {

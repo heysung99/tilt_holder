@@ -2,6 +2,8 @@ import { Router, type IRouter } from "express";
 import { db, gamesTable } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
 import { requireAdmin } from "../lib/admin.js";
+import { computeOverallRanking, settlementPayloads } from "../lib/notifications.js";
+import { notifyAll, pushPublicKey, senderEndpoint } from "../lib/push.js";
 
 const router: IRouter = Router();
 
@@ -32,6 +34,10 @@ router.post("/games", requireAdmin, async (req, res) => {
       return;
     }
 
+    const previousGames = pushPublicKey
+      ? await db.select({ date: gamesTable.date, results: gamesTable.results }).from(gamesTable)
+      : null;
+
     // Replace the game for this date atomically so a failed insert can't leave the date wiped.
     const inserted = await db.transaction(async (tx) => {
       await tx.delete(gamesTable).where(eq(gamesTable.date, date));
@@ -47,6 +53,12 @@ router.post("/games", requireAdmin, async (req, res) => {
     });
 
     res.status(201).json(inserted);
+
+    if (previousGames) {
+      const rankingBefore = computeOverallRanking(previousGames);
+      const rankingAfter = computeOverallRanking([...previousGames.filter((game) => game.date !== date), { results }]);
+      notifyAll(settlementPayloads(date, results, rankingBefore, rankingAfter), senderEndpoint(req));
+    }
   } catch (error) {
     console.error("Failed to save game:", error);
     res.status(500).json({ error: "Failed to save game result" });

@@ -10,9 +10,14 @@ import {
   rankingTier,
 } from '@/lib/player-stats';
 import { shareElementImage, shareOrDownloadBlob, withTemporaryStyles } from '@/lib/share-image';
+import { ApiError, api, setAdminPassword } from '@/lib/api';
+import { usePushNotifications } from '@/lib/use-push-notifications';
 import {
   ArrowUpRight,
   Banknote,
+  Bell,
+  BellOff,
+  BellRing,
   CalendarDays,
   Check,
   ChevronRight,
@@ -149,31 +154,6 @@ const initialExpenses: ExpenseEntry[] = [];
 
 const initialFundEntries: FundEntry[] = [];
 
-class ApiError extends Error {
-  constructor(public status: number, message: string) {
-    super(message);
-  }
-}
-
-// Verified against the server by PasswordModal and kept in memory only, so it's
-// gone on reload and never written to the bundle or storage.
-let adminPassword: string | null = null;
-
-async function api(path: string, options: { method?: string; body?: unknown; admin?: boolean } = {}) {
-  const method = options.method ?? 'GET';
-  const headers: Record<string, string> = {};
-  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (options.admin && adminPassword) headers['x-admin-password'] = adminPassword;
-
-  const response = await fetch(path, {
-    method,
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
-  if (!response.ok) throw new ApiError(response.status, `${method} ${path} failed with ${response.status}`);
-  return response;
-}
-
 type ServerGame = { date: string; results: Record<string, number> | null };
 
 function buildHistory(games: ServerGame[]) {
@@ -213,6 +193,7 @@ function AppShell() {
       || (navigator as Navigator & { standalone?: boolean }).standalone === true,
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const push = usePushNotifications();
   const [hasEntered, setHasEntered] = useState(false);
 
   useEffect(() => {
@@ -380,10 +361,22 @@ function AppShell() {
     setExpenses([]);
   };
 
-  const saveSessionToServer = (sessionToSave: SessionState, arrowsToSave: Record<PlayerName, 'up' | 'down'>, logToSave: BuyInLogEntry[]) => {
+  const saveSessionToServer = (
+    sessionToSave: SessionState,
+    arrowsToSave: Record<PlayerName, 'up' | 'down'>,
+    logToSave: BuyInLogEntry[],
+    options: { isNewGame?: boolean } = {},
+  ) => {
     api('/api/session', {
       method: 'PUT',
-      body: { ...sessionToSave, buyInArrows: arrowsToSave, buyInLog: logToSave },
+      body: {
+        ...sessionToSave,
+        buyInArrows: arrowsToSave,
+        buyInLog: logToSave,
+        ...(options.isNewGame ? { notify: 'created' } : {}),
+      },
+      // The server only announces a new game when the save is admin-authenticated.
+      admin: options.isNewGame,
     }).catch(handleSyncError);
   };
 
@@ -405,7 +398,7 @@ function AppShell() {
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
     clearExpenses();
-    saveSessionToServer(newSession, {}, []);
+    saveSessionToServer(newSession, {}, [], { isNewGame: true });
     setActiveTab('game');
   };
 
@@ -649,6 +642,23 @@ function AppShell() {
             >
               <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
             </button>
+            {push.state === 'loading' || push.state === 'unsupported' ? null : (
+              <button
+                type="button"
+                onClick={push.toggle}
+                disabled={push.isBusy}
+                className={`tilt-button flex items-center justify-center rounded-full border p-2.5 disabled:opacity-50 ${
+                  push.state === 'on'
+                    ? 'border-[#2d3d8f] bg-[#2d3d8f] text-white hover:bg-[#202e74]'
+                    : 'border-[#dfe1ee] bg-white text-[#2d3d8f] hover:bg-[#eef0ff]'
+                }`}
+                data-testid="button-push-toggle"
+                data-state={push.state}
+                aria-label={push.state === 'on' ? '알림 끄기' : '알림 켜기'}
+              >
+                {push.state === 'on' ? <BellRing size={16} /> : push.state === 'denied' ? <BellOff size={16} /> : <Bell size={16} />}
+              </button>
+            )}
             {isInstalled ? null : (
               <button
                 type="button"
@@ -1966,7 +1976,7 @@ function PasswordModal({
     setIsChecking(true);
     try {
       await api('/api/admin/verify', { method: 'POST', body: { password: pwd } });
-      adminPassword = pwd;
+      setAdminPassword(pwd);
       config.onSuccess();
       close();
     } catch (err) {
