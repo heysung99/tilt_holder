@@ -12,13 +12,12 @@ import {
 import { shareElementImage, shareOrDownloadBlob, withTemporaryStyles } from '@/lib/share-image';
 import { ApiError, api, setAdminPassword } from '@/lib/api';
 import { usePushNotifications } from '@/lib/use-push-notifications';
-import OnboardingModal from '@/components/onboarding-modal';
+import CoachMarks from '@/components/coach-marks';
 
-const INSTALL_ACK_KEY = 'tilt-install-acknowledged';
 const ONBOARDING_SNOOZE_KEY = 'tilt-onboarding-snooze-until';
 const ONBOARDING_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
 
-// Storage can be unavailable (private mode, blocked site data); the popup then just
+// Storage can be unavailable (private mode, blocked site data); the guide then just
 // behaves as if nothing was remembered.
 function readStorage(key: string) {
   try {
@@ -216,23 +215,33 @@ function AppShell() {
       || (navigator as Navigator & { standalone?: boolean }).standalone === true,
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasEntered, setHasEntered] = useState(false);
   const push = usePushNotifications();
-  // A regular browser tab can't detect an existing home-screen shortcut, so the
-  // person can tell us; otherwise the setup popup would keep asking.
-  const [installAcknowledged, setInstallAcknowledged] = useState(() => readStorage(INSTALL_ACK_KEY) === '1');
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const onboardingCheckedRef = useRef(false);
-  const installDone = isInstalled || installAcknowledged;
   const pushActionable = push.state === 'off' || push.state === 'ios-needs-install';
+  const [showGuide, setShowGuide] = useState(false);
+  const guideCheckedRef = useRef(false);
+  const guideTargets = showGuide
+    ? [
+        ...(isInstalled ? [] : [{ testId: 'button-install-shortcut', label: '앱 저장' }]),
+        ...(pushActionable ? [{ testId: 'button-push-toggle', label: '게임 실시간 소식 알림 받기' }] : []),
+      ]
+    : [];
 
   useEffect(() => {
-    // Decide once per app open, after the notification state is known.
-    if (onboardingCheckedRef.current || push.state === 'loading') return;
-    onboardingCheckedRef.current = true;
+    // Decide once per app open, after the notification state is known and the page's
+    // entrance animation is done (until then <main> traps the buttons below the overlay).
+    if (guideCheckedRef.current || push.state === 'loading' || !hasEntered) return;
+    guideCheckedRef.current = true;
     const snoozedUntil = Number(readStorage(ONBOARDING_SNOOZE_KEY) ?? 0);
-    if ((!installDone || pushActionable) && Date.now() > snoozedUntil) setShowOnboarding(true);
-  }, [push.state, installDone, pushActionable]);
-  const [hasEntered, setHasEntered] = useState(false);
+    if ((!isInstalled || pushActionable) && Date.now() > snoozedUntil) setShowGuide(true);
+  }, [push.state, hasEntered, isInstalled, pushActionable]);
+
+  useEffect(() => {
+    if (showGuide && guideTargets.length === 0) setShowGuide(false);
+  }, [showGuide, guideTargets.length]);
+
+  const isGuided = (testId: string) => guideTargets.some((target) => target.testId === testId);
+  const guidedClass = 'relative z-[60] ring-4 ring-white/90';
 
   useEffect(() => {
     // A CSS animation targeting `transform` keeps resolving to a matrix (never
@@ -691,7 +700,7 @@ function AppShell() {
                 type="button"
                 onClick={push.toggle}
                 disabled={push.isBusy}
-                className={`tilt-button flex items-center justify-center rounded-full border p-2.5 disabled:opacity-50 ${
+                className={`tilt-button flex items-center justify-center rounded-full border p-2.5 disabled:opacity-50 ${isGuided('button-push-toggle') ? guidedClass : ''} ${
                   push.state === 'on'
                     ? 'border-[#2d3d8f] bg-[#2d3d8f] text-white hover:bg-[#202e74]'
                     : 'border-[#dfe1ee] bg-white text-[#2d3d8f] hover:bg-[#eef0ff]'
@@ -707,7 +716,7 @@ function AppShell() {
               <button
                 type="button"
                 onClick={handleInstallClick}
-                className="tilt-button flex items-center gap-1.5 rounded-full border border-[#dfe1ee] bg-white px-3 py-2 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff]"
+                className={`tilt-button flex items-center gap-1.5 rounded-full border border-[#dfe1ee] bg-white px-3 py-2 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff] ${isGuided('button-install-shortcut') ? guidedClass : ''}`}
                 data-testid="button-install-shortcut"
               >
                 <Download size={14} /> 바로가기 저장
@@ -781,23 +790,13 @@ function AppShell() {
           }}
         />
       ) : null}
-      {showOnboarding ? (
-        <OnboardingModal
-          installDone={installDone}
-          canPromptInstall={installPrompt !== null}
-          onInstall={promptInstall}
-          onAcknowledgeInstall={() => {
-            writeStorage(INSTALL_ACK_KEY, '1');
-            setInstallAcknowledged(true);
-          }}
-          pushState={push.state}
-          isPushBusy={push.isBusy}
-          onEnablePush={push.turnOn}
-          onLater={() => {
+      {guideTargets.length > 0 ? (
+        <CoachMarks
+          targets={guideTargets}
+          onDismiss={() => {
             writeStorage(ONBOARDING_SNOOZE_KEY, String(Date.now() + ONBOARDING_SNOOZE_MS));
-            setShowOnboarding(false);
+            setShowGuide(false);
           }}
-          onClose={() => setShowOnboarding(false)}
         />
       ) : null}
       <PasswordModal

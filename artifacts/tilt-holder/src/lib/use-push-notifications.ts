@@ -99,11 +99,6 @@ export function usePushNotifications() {
     });
   };
 
-  // For the onboarding popup, which shows its own completed state instead of an alert.
-  const turnOn = () => run(async () => {
-    await enable();
-  });
-
   async function run(action: () => Promise<void>) {
     if (isBusy || state === 'loading') return;
     setIsBusy(true);
@@ -117,5 +112,5 @@ export function usePushNotifications() {
     }
   }
 
-  return { state, isBusy, toggle, turnOn };
+  return { state, isBusy, toggle };
 }
