@@ -14,31 +14,6 @@ import { ApiError, api, setAdminPassword } from '@/lib/api';
 import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 
-const headerIconButton = 'tilt-button flex items-center justify-center rounded-full border p-2.5';
-const headerIconIdle = 'border-[#dfe1ee] bg-white text-[#2d3d8f] hover:bg-[#eef0ff]';
-
-// Separate from the earlier setup popup's key, so dismissing that popup doesn't hide
-// the arrow guide that replaced it.
-const GUIDE_SNOOZE_KEY = 'tilt-guide-snooze-until';
-const GUIDE_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
-
-// Storage can be unavailable (private mode, blocked site data); the guide then just
-// behaves as if nothing was remembered.
-function readStorage(key: string) {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeStorage(key: string, value: string) {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Not remembered across visits; the current session still works.
-  }
-}
 import {
   ArrowUpRight,
   Banknote,
@@ -70,6 +45,9 @@ import {
 import { type HistoricalRecord } from '@/data/history';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
+
+const headerIconButton = 'tilt-button flex items-center justify-center rounded-full border p-2.5';
+const headerIconIdle = 'border-[#dfe1ee] bg-white text-[#2d3d8f] hover:bg-[#eef0ff]';
 
 const PlayerAnalysisModal = lazy(() => import('@/components/player-analysis-modal'));
 
@@ -233,12 +211,12 @@ function AppShell() {
     : [];
 
   useEffect(() => {
-    // Decide once per app open, after the notification state is known and the page's
-    // entrance animation is done (until then <main> traps the buttons below the overlay).
+    // Shown on every app open until both steps are done; dismissing only closes it for
+    // this visit. Waits for the notification state and the page's entrance animation
+    // (until then <main> traps the buttons below the overlay).
     if (guideCheckedRef.current || push.state === 'loading' || !hasEntered) return;
     guideCheckedRef.current = true;
-    const snoozedUntil = Number(readStorage(GUIDE_SNOOZE_KEY) ?? 0);
-    if ((!isInstalled || pushActionable) && Date.now() > snoozedUntil) setShowGuide(true);
+    if (!isInstalled || pushActionable) setShowGuide(true);
   }, [push.state, hasEntered, isInstalled, pushActionable]);
 
   useEffect(() => {
@@ -824,10 +802,7 @@ function AppShell() {
       {guideTargets.length > 0 ? (
         <CoachMarks
           targets={guideTargets}
-          onDismiss={() => {
-            writeStorage(GUIDE_SNOOZE_KEY, String(Date.now() + GUIDE_SNOOZE_MS));
-            setShowGuide(false);
-          }}
+          onDismiss={() => setShowGuide(false)}
         />
       ) : null}
       <PasswordModal
