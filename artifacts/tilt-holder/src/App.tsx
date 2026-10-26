@@ -17,8 +17,10 @@ import CoachMarks from '@/components/coach-marks';
 const headerIconButton = 'tilt-button flex items-center justify-center rounded-full border p-2.5';
 const headerIconIdle = 'border-[#dfe1ee] bg-white text-[#2d3d8f] hover:bg-[#eef0ff]';
 
-const ONBOARDING_SNOOZE_KEY = 'tilt-onboarding-snooze-until';
-const ONBOARDING_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
+// Separate from the earlier setup popup's key, so dismissing that popup doesn't hide
+// the arrow guide that replaced it.
+const GUIDE_SNOOZE_KEY = 'tilt-guide-snooze-until';
+const GUIDE_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
 
 // Storage can be unavailable (private mode, blocked site data); the guide then just
 // behaves as if nothing was remembered.
@@ -235,7 +237,7 @@ function AppShell() {
     // entrance animation is done (until then <main> traps the buttons below the overlay).
     if (guideCheckedRef.current || push.state === 'loading' || !hasEntered) return;
     guideCheckedRef.current = true;
-    const snoozedUntil = Number(readStorage(ONBOARDING_SNOOZE_KEY) ?? 0);
+    const snoozedUntil = Number(readStorage(GUIDE_SNOOZE_KEY) ?? 0);
     if ((!isInstalled || pushActionable) && Date.now() > snoozedUntil) setShowGuide(true);
   }, [push.state, hasEntered, isInstalled, pushActionable]);
 
@@ -823,7 +825,7 @@ function AppShell() {
         <CoachMarks
           targets={guideTargets}
           onDismiss={() => {
-            writeStorage(ONBOARDING_SNOOZE_KEY, String(Date.now() + ONBOARDING_SNOOZE_MS));
+            writeStorage(GUIDE_SNOOZE_KEY, String(Date.now() + GUIDE_SNOOZE_MS));
             setShowGuide(false);
           }}
         />
