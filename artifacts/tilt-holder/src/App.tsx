@@ -223,16 +223,11 @@ function AppShell() {
   const pushActionable = push.state === 'off' || push.state === 'ios-needs-install';
   const [showGuide, setShowGuide] = useState(false);
   const guideCheckedRef = useRef(false);
-  const setupTargets = showGuide
+  const guideTargets = showGuide
     ? [
         ...(isInstalled ? [] : [{ testId: 'button-install-shortcut', label: '앱 저장' }]),
         ...(pushActionable ? [{ testId: 'button-push-toggle', label: '게임 실시간 소식 알림 받기' }] : []),
       ]
-    : [];
-  // The share button is pointed out alongside the setup steps but isn't a step itself,
-  // so it never keeps the guide open on its own.
-  const guideTargets = setupTargets.length
-    ? [...setupTargets, { testId: 'button-share-app', label: '앱 링크 공유' }]
     : [];
 
   useEffect(() => {
@@ -750,7 +745,7 @@ function AppShell() {
             <button
               type="button"
               onClick={handleShareApp}
-              className={`${headerIconButton} ${headerIconIdle} ${isGuided('button-share-app') ? guidedClass : ''}`}
+              className={`${headerIconButton} ${headerIconIdle}`}
               data-testid="button-share-app"
               aria-label="앱 링크 공유"
             >
