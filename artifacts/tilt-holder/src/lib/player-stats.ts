@@ -27,6 +27,38 @@ export function rankingTier(rank: number, total: number) {
   return tiers[tierIndex];
 }
 
+const TIER_ORDER = ['챌린저', '그랜드마스터', '마스터', '다이아', '플래티넘', '골드', '실버', '브론즈', '아이언'];
+
+// Higher is better; compares two tiers from rankingTier.
+export function tierLevel(label: string) {
+  return TIER_ORDER.length - TIER_ORDER.indexOf(label);
+}
+
+// Overall ranking counting only the games up to and including dateIndex, ordered
+// like the ranking card (net, then win rate, then games played).
+export function rankingAtDate(users: Player[], historicalRecords: HistoricalRecord[], dateIndex: number) {
+  const stats = users
+    .map((player) => {
+      const values = (historicalRecords.find((item) => item.name === player.name)?.values ?? []).slice(0, dateIndex + 1);
+      const playedValues = values.filter((val): val is number => val !== null && val !== undefined);
+      const wins = playedValues.filter((val) => val > 0).length;
+      return {
+        name: player.name,
+        played: playedValues.length,
+        net: playedValues.reduce((sum, val) => sum + val, 0),
+        winRate: playedValues.length ? wins / playedValues.length : 0,
+      };
+    })
+    .sort((a, b) => b.net - a.net || b.winRate - a.winRate || b.played - a.played);
+
+  const ranked = stats.filter((stat) => stat.played >= 5);
+  const rankMap = new Map<PlayerName, { rank: number; tier: ReturnType<typeof rankingTier> }>();
+  ranked.forEach((stat, index) => {
+    rankMap.set(stat.name, { rank: index + 1, tier: rankingTier(index + 1, ranked.length) });
+  });
+  return rankMap;
+}
+
 export function overallRanking(users: Player[], historicalRecords: HistoricalRecord[]) {
   const stats = users
     .map((player) => {

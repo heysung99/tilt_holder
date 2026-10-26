@@ -6,8 +6,11 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import {
   type Player,
   type PlayerName,
+  formatManwon,
   overallRanking,
+  rankingAtDate,
   rankingTier,
+  tierLevel,
 } from '@/lib/player-stats';
 import { shareElementImage, shareOrDownloadBlob, withTemporaryStyles } from '@/lib/share-image';
 import { ApiError, api, setAdminPassword } from '@/lib/api';
@@ -22,6 +25,7 @@ import {
   BellRing,
   CalendarDays,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CirclePlus,
@@ -145,6 +149,15 @@ function formatSignedWon(value: number) {
 function formatSessionDate(value: string) {
   const [, month, day] = value.split('-');
   return month && day ? `${month}.${day}` : value;
+}
+
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+function formatDateWithWeekday(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return value;
+  const weekday = WEEKDAYS[new Date(year, month - 1, day).getDay()];
+  return `${year}.${String(month).padStart(2, '0')}.${String(day).padStart(2, '0')} (${weekday})`;
 }
 
 function makeAmountRecord(names: PlayerName[], amount: number) {
@@ -1378,6 +1391,7 @@ function RankingScreen({
   const [showTierTable, setShowTierTable] = useState(false);
   const [selectedPlayerName, setSelectedPlayerName] = useState<PlayerName | null>(null);
   const [showDateBuyInLog, setShowDateBuyInLog] = useState(false);
+  const [showUnranked, setShowUnranked] = useState(false);
   const rankingCardRef = useRef<HTMLElement>(null);
 
   const handleAdminToggle = () => {
@@ -1440,7 +1454,18 @@ function RankingScreen({
   const olderDate = selectedDateIndex > 0 ? historyDates[selectedDateIndex - 1] : null;
   const newerDate = selectedDateIndex >= 0 && selectedDateIndex < historyDates.length - 1 ? historyDates[selectedDateIndex + 1] : null;
   const shownDetail = gameDetails[shownDate];
-  const dateArrowButton = 'tilt-button flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#dfe1ee] bg-white text-[#2d3d8f] hover:bg-[#eef0ff] disabled:cursor-default disabled:text-[#c9ccd8] disabled:hover:bg-white';
+  const dateResults = users
+    .map((player) => {
+      const record = historicalRecords.find((item) => item.name === player.name);
+      const value = selectedDateIndex >= 0 ? record?.values[selectedDateIndex] ?? null : null;
+      return { player, value };
+    })
+    .filter((item): item is { player: Player; value: number } => item.value !== null)
+    .sort((a, b) => b.value - a.value);
+  // Overall tiers just before and just after the shown game, for the tier-change arrows.
+  const tiersBeforeDate = rankingAtDate(users, historicalRecords, selectedDateIndex - 1);
+  const tiersAfterDate = rankingAtDate(users, historicalRecords, selectedDateIndex);
+  const dateArrowButton = 'tilt-button flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[#2d3d8f] hover:bg-[#eef0ff] disabled:cursor-default disabled:text-[#d5d7e0] disabled:hover:bg-transparent';
 
   return (
     <div>
@@ -1614,16 +1639,25 @@ function RankingScreen({
 
       {unrankedPlayers.length > 0 ? (
         <section className="rise-in delay-2 mt-6 tilt-card overflow-hidden" data-testid="card-unranked-list">
-          <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4">
+          <button
+            type="button"
+            className={`tilt-button flex w-full items-center justify-between px-5 py-4 text-left hover:bg-[#fafaf6] ${showUnranked ? 'border-b border-[#ececf0]' : ''}`}
+            data-testid="button-toggle-unranked"
+            aria-expanded={showUnranked}
+            onClick={() => setShowUnranked((current) => !current)}
+          >
             <div>
               <span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">
                 unranked · {unrankedPlayers.length} players
               </span>
               <p className="mt-1 text-xs text-[#858a9b]">5회 미만 참여자 · 참여 5회부터 정식 랭킹</p>
             </div>
-            <span className="rounded-full bg-[#f1f1ee] px-2 py-1 text-[10px] font-bold text-[#697087]">언랭</span>
-          </div>
-          <div className="overflow-x-auto">
+            <span className="flex items-center gap-1.5">
+              <span className="rounded-full bg-[#f1f1ee] px-2 py-1 text-[10px] font-bold text-[#697087]">언랭</span>
+              <ChevronDown size={16} className={`text-[#a0a4b1] transition-transform ${showUnranked ? 'rotate-180' : ''}`} />
+            </span>
+          </button>
+          {showUnranked ? <div className="overflow-x-auto">
             <div className="min-w-[650px] divide-y divide-[#ececf0]">
               {unrankedPlayers.map((stat, index) => (
                 <div className="px-3 py-1.5" key={stat.player.name} data-testid={`row-unranked-${stat.player.name}`}>
@@ -1668,50 +1702,76 @@ function RankingScreen({
                 </div>
               ))}
             </div>
-          </div>
+          </div> : null}
         </section>
       ) : null}
 
       <section className="rise-in delay-2 mt-6" data-testid="section-date-results">
         <div className="mb-3 flex items-end justify-between"><div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">date results</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">날짜별 결과</h3></div><span className="text-xs text-[#858a9b]">총 {historyDates.length}회</span></div>
-        <label className="sr-only" htmlFor="ranking-date-select">전적 날짜 선택</label>
-        <div className="flex items-center gap-2">
-          <button type="button" className={dateArrowButton} disabled={!olderDate} onClick={() => olderDate && setSelectedDate(olderDate)} aria-label="이전 게임" data-testid="button-ranking-date-prev">
-            <ChevronLeft size={20} />
-          </button>
-          <select id="ranking-date-select" value={shownDate} onChange={(event) => setSelectedDate(event.target.value)} className="h-11 min-w-0 flex-1 rounded-xl border border-[#dfe1ee] bg-white px-3 text-center text-sm font-bold text-[#20253a] outline-none focus:border-[#2d3d8f]" data-testid="select-ranking-date">
-            {historyDates.slice().reverse().map((date) => <option key={date} value={date}>{date}</option>)}
-          </select>
-          <button type="button" className={dateArrowButton} disabled={!newerDate} onClick={() => newerDate && setSelectedDate(newerDate)} aria-label="다음 게임" data-testid="button-ranking-date-next">
-            <ChevronRight size={20} />
-          </button>
-        </div>
-        <div className="tilt-card mt-3 divide-y divide-[#ececf0]">
-          {users
-            .map((player) => {
-              const record = historicalRecords.find((item) => item.name === player.name);
-              const value = selectedDateIndex >= 0 ? record?.values[selectedDateIndex] ?? null : null;
-              return { player, value };
-            })
-            .filter((item): item is { player: Player; value: number } => item.value !== null)
-            .sort((a, b) => b.value - a.value)
-            .map(({ player, value }) => (
-              <div key={player.name} className="flex items-center gap-3 px-4 py-3" data-testid={`row-date-result-${player.name}`}>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-[#20253a]">{player.name}</p>
-                  {shownDetail?.buyIns && player.name in shownDetail.buyIns ? (
-                    <p className="mt-0.5 text-xs text-[#858a9b]" data-testid={`text-date-buyins-${player.name}`}>바이인 {shownDetail.buyIns[player.name]}회</p>
-                  ) : null}
+        <div className="tilt-card overflow-hidden">
+          <div className="flex items-center gap-1 border-b border-[#ececf0] p-2">
+            <button type="button" className={dateArrowButton} disabled={!olderDate} onClick={() => olderDate && setSelectedDate(olderDate)} aria-label="이전 게임" data-testid="button-ranking-date-prev">
+              <ChevronLeft size={20} />
+            </button>
+            {/* The native select sits invisibly over the label so tapping the date still opens the picker. */}
+            <div className="relative min-w-0 flex-1 text-center">
+              <p className="flex items-center justify-center gap-1 text-[15px] font-bold tracking-[-0.02em] text-[#20253a]">
+                {shownDate ? formatDateWithWeekday(shownDate) : '기록 없음'}
+                <ChevronDown size={14} className="text-[#a0a4b1]" />
+              </p>
+              {shownDate ? <p className="mt-0.5 text-[11px] text-[#858a9b]">{selectedDateIndex + 1}번째 게임 · {dateResults.length}명 참가</p> : null}
+              <label className="sr-only" htmlFor="ranking-date-select">전적 날짜 선택</label>
+              <select id="ranking-date-select" value={shownDate} onChange={(event) => setSelectedDate(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" data-testid="select-ranking-date">
+                {historyDates.slice().reverse().map((date) => <option key={date} value={date}>{formatDateWithWeekday(date)}</option>)}
+              </select>
+            </div>
+            <button type="button" className={dateArrowButton} disabled={!newerDate} onClick={() => newerDate && setSelectedDate(newerDate)} aria-label="다음 게임" data-testid="button-ranking-date-next">
+              <ChevronRight size={20} />
+            </button>
+          </div>
+          <div className="divide-y divide-[#ececf0]">
+            {dateResults.map(({ player, value }) => {
+              const after = tiersAfterDate.get(player.name);
+              const before = tiersBeforeDate.get(player.name);
+              const tierShift = after && before ? tierLevel(after.tier.label) - tierLevel(before.tier.label) : 0;
+              const buyInCount = shownDetail?.buyIns?.[player.name];
+              return (
+                <div key={player.name} className="flex items-center gap-3 px-4 py-3" data-testid={`row-date-result-${player.name}`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-bold text-[#20253a]">{player.name}</span>
+                      {after ? (
+                        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${after.tier.className}`}>
+                          <span>{after.tier.icon}</span>
+                          <span>{after.tier.label}</span>
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-full bg-[#f1f1ee] px-2 py-0.5 text-[10px] font-bold text-[#697087]">언랭</span>
+                      )}
+                      <span data-testid={`tier-change-${player.name}`}>
+                        {after && !before ? <span className="mono text-[9px] font-extrabold text-[#2563eb]">NEW</span> : null}
+                        {tierShift > 0 ? <span className="mono text-[11px] font-extrabold text-[#16a34a]" aria-label="티어 상승">▲</span> : null}
+                        {tierShift < 0 ? <span className="mono text-[11px] font-extrabold text-[#dc2626]" aria-label="티어 하락">▼</span> : null}
+                      </span>
+                    </div>
+                    {buyInCount !== undefined ? (
+                      <p className="mt-0.5 text-xs text-[#858a9b]" data-testid={`text-date-buyins-${player.name}`}>바이인 {buyInCount}회</p>
+                    ) : null}
+                  </div>
+                  <span className={`mono shrink-0 text-[15px] font-bold tracking-[-0.03em] ${value > 0 ? 'text-[#3f7a1f]' : value < 0 ? 'text-[#c0392b]' : 'text-[#858a9b]'}`} data-testid={`text-date-amount-${player.name}`}>
+                    {formatManwon(value)}
+                  </span>
                 </div>
-                <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'} <span className="mono">{value > 0 ? '+' : ''}{value}</span></span>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+          {shownDetail?.buyInLog ? (
+            <button type="button" className="tilt-button flex w-full items-center justify-between border-t border-[#ececf0] px-4 py-3 text-xs font-bold text-[#2d3d8f] hover:bg-[#f6f7ff]" data-testid="button-date-buyin-log" onClick={() => setShowDateBuyInLog(true)}>
+              <span className="flex items-center gap-1.5"><Clock3 size={14} /> 바이인 로그</span>
+              <ChevronRight size={15} className="text-[#a0a4b1]" />
+            </button>
+          ) : null}
         </div>
-        {shownDetail?.buyInLog ? (
-          <button type="button" className="tilt-button mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#dfe1ee] bg-white py-2.5 text-xs font-bold text-[#2d3d8f]" data-testid="button-date-buyin-log" onClick={() => setShowDateBuyInLog(true)}>
-            <Clock3 size={14} /> 바이인 로그 보기
-          </button>
-        ) : null}
       </section>
       <button type="button" className="tilt-button mt-6 flex w-full items-center justify-between rounded-[16px] border border-dashed border-[#d8d9df] px-4 py-3 text-left hover:bg-[#f8f8f4]" data-testid="button-ranking-rule" onClick={() => window.alert('빈칸은 미참여, 0을 포함한 음수는 패배로 계산했어요.')}>
         <span className="flex items-center gap-2 text-xs font-semibold text-[#697087]"><RotateCcw size={15} /> 전적 계산 기준</span><ChevronRight size={15} className="text-[#a0a4b1]" />
