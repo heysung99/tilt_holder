@@ -37,11 +37,12 @@ export function usePushNotifications() {
       .catch(() => setState('off'));
   }, []);
 
+  // Resolves true only when the device ended up subscribed.
   const enable = async () => {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
       if (permission === 'denied') setState('denied');
-      return;
+      return false;
     }
     let publicKey: string;
     try {
@@ -49,7 +50,7 @@ export function usePushNotifications() {
     } catch (error) {
       if (error instanceof ApiError && error.status === 503) {
         window.alert('서버에 알림 설정이 아직 되어 있지 않아요.');
-        return;
+        return false;
       }
       throw error;
     }
@@ -61,7 +62,7 @@ export function usePushNotifications() {
     await api('/api/push/subscribe', { method: 'POST', body: subscription.toJSON() });
     setPushEndpoint(subscription.endpoint);
     setState('on');
-    window.alert('알림을 켰어요. 게임 개설, 바이인 변동, 정산 결과, 랭킹 변동을 알려드릴게요.');
+    return true;
   };
 
   const disable = async () => {
@@ -89,18 +90,32 @@ export function usePushNotifications() {
       window.alert('알림이 차단되어 있어요. 휴대폰 또는 브라우저 설정에서 이 사이트의 알림을 허용해주세요.');
       return;
     }
+    await run(async () => {
+      if (state === 'on') {
+        await disable();
+      } else if (await enable()) {
+        window.alert('알림을 켰어요. 게임 개설, 바이인 변동, 정산 결과, 랭킹 변동을 알려드릴게요.');
+      }
+    });
+  };
+
+  // For the onboarding popup, which shows its own completed state instead of an alert.
+  const turnOn = () => run(async () => {
+    await enable();
+  });
+
+  async function run(action: () => Promise<void>) {
     if (isBusy || state === 'loading') return;
     setIsBusy(true);
     try {
-      if (state === 'on') await disable();
-      else await enable();
+      await action();
     } catch (error) {
       console.error(error);
       window.alert('알림 설정에 실패했어요. 잠시 후 다시 시도해주세요.');
     } finally {
       setIsBusy(false);
     }
-  };
+  }
 
-  return { state, isBusy, toggle };
+  return { state, isBusy, toggle, turnOn };
 }

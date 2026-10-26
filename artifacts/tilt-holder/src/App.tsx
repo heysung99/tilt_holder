@@ -12,6 +12,29 @@ import {
 import { shareElementImage, shareOrDownloadBlob, withTemporaryStyles } from '@/lib/share-image';
 import { ApiError, api, setAdminPassword } from '@/lib/api';
 import { usePushNotifications } from '@/lib/use-push-notifications';
+import OnboardingModal from '@/components/onboarding-modal';
+
+const INSTALL_ACK_KEY = 'tilt-install-acknowledged';
+const ONBOARDING_SNOOZE_KEY = 'tilt-onboarding-snooze-until';
+const ONBOARDING_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
+
+// Storage can be unavailable (private mode, blocked site data); the popup then just
+// behaves as if nothing was remembered.
+function readStorage(key: string) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Not remembered across visits; the current session still works.
+  }
+}
 import {
   ArrowUpRight,
   Banknote,
@@ -194,6 +217,21 @@ function AppShell() {
   );
   const [isRefreshing, setIsRefreshing] = useState(false);
   const push = usePushNotifications();
+  // A regular browser tab can't detect an existing home-screen shortcut, so the
+  // person can tell us; otherwise the setup popup would keep asking.
+  const [installAcknowledged, setInstallAcknowledged] = useState(() => readStorage(INSTALL_ACK_KEY) === '1');
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const onboardingCheckedRef = useRef(false);
+  const installDone = isInstalled || installAcknowledged;
+  const pushActionable = push.state === 'off' || push.state === 'ios-needs-install';
+
+  useEffect(() => {
+    // Decide once per app open, after the notification state is known.
+    if (onboardingCheckedRef.current || push.state === 'loading') return;
+    onboardingCheckedRef.current = true;
+    const snoozedUntil = Number(readStorage(ONBOARDING_SNOOZE_KEY) ?? 0);
+    if ((!installDone || pushActionable) && Date.now() > snoozedUntil) setShowOnboarding(true);
+  }, [push.state, installDone, pushActionable]);
   const [hasEntered, setHasEntered] = useState(false);
 
   useEffect(() => {
@@ -223,11 +261,17 @@ function AppShell() {
     };
   }, []);
 
+  const promptInstall = async () => {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    setInstallPrompt(null);
+    if (choice.outcome === 'accepted') setIsInstalled(true);
+  };
+
   const handleInstallClick = async () => {
     if (installPrompt) {
-      await installPrompt.prompt();
-      await installPrompt.userChoice;
-      setInstallPrompt(null);
+      await promptInstall();
       return;
     }
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
@@ -735,6 +779,25 @@ function AppShell() {
             setShowSettlementModal(false);
             clearExpenses();
           }}
+        />
+      ) : null}
+      {showOnboarding ? (
+        <OnboardingModal
+          installDone={installDone}
+          canPromptInstall={installPrompt !== null}
+          onInstall={promptInstall}
+          onAcknowledgeInstall={() => {
+            writeStorage(INSTALL_ACK_KEY, '1');
+            setInstallAcknowledged(true);
+          }}
+          pushState={push.state}
+          isPushBusy={push.isBusy}
+          onEnablePush={push.turnOn}
+          onLater={() => {
+            writeStorage(ONBOARDING_SNOOZE_KEY, String(Date.now() + ONBOARDING_SNOOZE_MS));
+            setShowOnboarding(false);
+          }}
+          onClose={() => setShowOnboarding(false)}
         />
       ) : null}
       <PasswordModal
