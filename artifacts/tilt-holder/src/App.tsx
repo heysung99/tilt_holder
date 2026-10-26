@@ -22,6 +22,7 @@ import {
   BellRing,
   CalendarDays,
   Check,
+  ChevronLeft,
   ChevronRight,
   CirclePlus,
   Clock3,
@@ -78,6 +79,13 @@ type BuyInLogEntry = {
   name: PlayerName;
   delta: number;
   after: number;
+};
+
+// Buy-in counts and change log recorded with a settled game. Null for games
+// settled before these were saved.
+type GameDetail = {
+  buyIns: Record<string, number> | null;
+  buyInLog: BuyInLogEntry[] | null;
 };
 
 type BeforeInstallPromptEvent = Event & {
@@ -159,7 +167,12 @@ const initialExpenses: ExpenseEntry[] = [];
 
 const initialFundEntries: FundEntry[] = [];
 
-type ServerGame = { date: string; results: Record<string, number> | null };
+type ServerGame = {
+  date: string;
+  results: Record<string, number> | null;
+  buyIns?: Record<string, number> | null;
+  buyInLog?: BuyInLogEntry[] | null;
+};
 
 function buildHistory(games: ServerGame[]) {
   const dates = [...new Set(games.map((game) => game.date))];
@@ -173,7 +186,21 @@ function buildHistory(games: ServerGame[]) {
     });
   });
   const records: HistoricalRecord[] = [...valuesByName].map(([name, values]) => ({ name, values }));
-  return { dates, records };
+  const details: Record<string, GameDetail> = {};
+  games.forEach((game) => {
+    details[game.date] = { buyIns: game.buyIns ?? null, buyInLog: game.buyInLog ?? null };
+  });
+  return { dates, records, details };
+}
+
+function renameInGameDetail(detail: GameDetail, from: string, to: string): GameDetail {
+  let buyIns = detail.buyIns;
+  if (buyIns && from in buyIns) {
+    const { [from]: count, ...rest } = buyIns;
+    buyIns = { ...rest, [to]: count };
+  }
+  const buyInLog = detail.buyInLog?.map((entry) => entry.name === from ? { ...entry, name: to } : entry) ?? null;
+  return { buyIns, buyInLog };
 }
 
 function AppShell() {
@@ -184,6 +211,7 @@ function AppShell() {
   const [fundEntries, setFundEntries] = useState<FundEntry[]>(initialFundEntries);
   const [historyDates, setHistoryDates] = useState<string[]>([]);
   const [historicalRecords, setHistoricalRecords] = useState<HistoricalRecord[]>([]);
+  const [gameDetails, setGameDetails] = useState<Record<string, GameDetail>>({});
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [passwordModalConfig, setPasswordModalConfig] = useState<PasswordModalConfig>(null);
   const [isEditingBuyIns, setIsEditingBuyIns] = useState(false);
@@ -355,9 +383,10 @@ function AppShell() {
         setBuyInEditSnapshot(null);
       }
 
-      const { dates, records } = buildHistory(Array.isArray(data.games) ? data.games : []);
+      const { dates, records, details } = buildHistory(Array.isArray(data.games) ? data.games : []);
       setHistoryDates(dates);
       setHistoricalRecords(records);
+      setGameDetails(details);
     } catch (err) {
       console.error('Failed to fetch from central DB:', err);
     }
@@ -526,6 +555,7 @@ function AppShell() {
     if (!trimmedName || currentName === trimmedName || users.some((user) => user.name === trimmedName)) return false;
     setUsers((current) => current.map((user) => user.name === currentName ? { ...user, name: trimmedName } : user));
     setHistoricalRecords((current) => current.map((record) => record.name === currentName ? { ...record, name: trimmedName } : record));
+    setGameDetails((current) => Object.fromEntries(Object.entries(current).map(([date, detail]) => [date, renameInGameDetail(detail, currentName, trimmedName)])));
     api(`/api/users/${encodeURIComponent(currentName)}`, {
       method: 'PUT',
       body: { nextName: trimmedName },
@@ -584,6 +614,10 @@ function AppShell() {
       const netManwon = Math.round((netWon / 10000) * 10) / 10;
       participantResultsObj[row.name] = netManwon;
     });
+    const participantBuyIns: Record<string, number> = {};
+    session.participantNames.forEach((name) => {
+      participantBuyIns[name] = session.buyIns[name] ?? 0;
+    });
 
     api('/api/games', {
       method: 'POST',
@@ -594,9 +628,12 @@ function AppShell() {
         bankName: session.bankName,
         participantNames: session.participantNames,
         results: participantResultsObj,
+        buyIns: participantBuyIns,
+        buyInLog,
       },
       admin: true,
     }).catch(handleSyncError);
+    setGameDetails((current) => ({ ...current, [targetDate]: { buyIns: participantBuyIns, buyInLog } }));
 
     setHistoryDates((currentDates) => {
       const dateIndex = currentDates.indexOf(targetDate);
@@ -662,6 +699,10 @@ function AppShell() {
     if (dateIndex === -1) return;
 
     setHistoryDates((current) => current.filter((d) => d !== dateToDelete));
+    setGameDetails((current) => {
+      const { [dateToDelete]: _removed, ...rest } = current;
+      return rest;
+    });
     setHistoricalRecords((current) =>
       current.map((record) => {
         const values = [...record.values];
@@ -772,6 +813,7 @@ function AppShell() {
             users={users}
             historyDates={historyDates}
             historicalRecords={historicalRecords}
+            gameDetails={gameDetails}
             onDeleteHistoryDate={deleteHistoryDate}
             onVerifyPassword={verifyPassword}
           />
@@ -1060,7 +1102,7 @@ function GameScreen({
   );
 }
 
-function BuyInLogModal({ log, onClose }: { log: BuyInLogEntry[]; onClose: () => void }) {
+function BuyInLogModal({ log, subtitle, onClose }: { log: BuyInLogEntry[]; subtitle?: string; onClose: () => void }) {
   const formatTime = (iso: string) => {
     const d = new Date(iso);
     return d.toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1070,7 +1112,10 @@ function BuyInLogModal({ log, onClose }: { log: BuyInLogEntry[]; onClose: () => 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
       <div className="rise-in flex max-h-[80vh] w-full max-w-[420px] flex-col rounded-[24px] bg-white p-6 shadow-2xl">
         <div className="flex items-center justify-between border-b border-[#ececf0] pb-4">
-          <h3 className="text-lg font-bold text-[#20253a]">바이인 Log</h3>
+          <div>
+            <h3 className="text-lg font-bold text-[#20253a]">바이인 Log</h3>
+            {subtitle ? <p className="mono mt-0.5 text-xs text-[#858a9b]">{subtitle}</p> : null}
+          </div>
           <button type="button" onClick={onClose} className="rounded-full bg-[#f1f1ee] px-3 py-1 text-xs font-bold text-[#697087]">닫기</button>
         </div>
         <div className="mt-4 flex-1 space-y-2 overflow-y-auto text-xs">
@@ -1315,12 +1360,14 @@ function RankingScreen({
   users,
   historyDates,
   historicalRecords,
+  gameDetails,
   onDeleteHistoryDate,
   onVerifyPassword,
 }: {
   users: Player[];
   historyDates: string[];
   historicalRecords: HistoricalRecord[];
+  gameDetails: Record<string, GameDetail>;
   onDeleteHistoryDate: (date: string) => void;
   onVerifyPassword: (title: string, onSuccess: () => void) => void;
 }) {
@@ -1330,6 +1377,7 @@ function RankingScreen({
   const [isAdmin, setIsAdmin] = useState(false);
   const [showTierTable, setShowTierTable] = useState(false);
   const [selectedPlayerName, setSelectedPlayerName] = useState<PlayerName | null>(null);
+  const [showDateBuyInLog, setShowDateBuyInLog] = useState(false);
   const rankingCardRef = useRef<HTMLElement>(null);
 
   const handleAdminToggle = () => {
@@ -1386,7 +1434,13 @@ function RankingScreen({
   const rankedPlayers = currentAllStats.filter((stat) => stat.played >= minPlayedThreshold);
   const unrankedPlayers = currentAllStats.filter((stat) => stat.played < minPlayedThreshold);
 
-  const selectedDateIndex = historyDates.indexOf(selectedDate);
+  // Falls back to the latest game when the selection is gone (deleted, or not loaded yet).
+  const shownDate = historyDates.includes(selectedDate) ? selectedDate : historyDates[historyDates.length - 1] ?? '';
+  const selectedDateIndex = historyDates.indexOf(shownDate);
+  const olderDate = selectedDateIndex > 0 ? historyDates[selectedDateIndex - 1] : null;
+  const newerDate = selectedDateIndex >= 0 && selectedDateIndex < historyDates.length - 1 ? historyDates[selectedDateIndex + 1] : null;
+  const shownDetail = gameDetails[shownDate];
+  const dateArrowButton = 'tilt-button flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#dfe1ee] bg-white text-[#2d3d8f] hover:bg-[#eef0ff] disabled:cursor-default disabled:text-[#c9ccd8] disabled:hover:bg-white';
 
   return (
     <div>
@@ -1621,9 +1675,17 @@ function RankingScreen({
       <section className="rise-in delay-2 mt-6" data-testid="section-date-results">
         <div className="mb-3 flex items-end justify-between"><div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">date results</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">날짜별 결과</h3></div><span className="text-xs text-[#858a9b]">총 {historyDates.length}회</span></div>
         <label className="sr-only" htmlFor="ranking-date-select">전적 날짜 선택</label>
-        <select id="ranking-date-select" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="h-11 w-full rounded-xl border border-[#dfe1ee] bg-white px-3 text-sm font-bold text-[#20253a] outline-none focus:border-[#2d3d8f]" data-testid="select-ranking-date">
-          {historyDates.slice().reverse().map((date) => <option key={date} value={date}>{date}</option>)}
-        </select>
+        <div className="flex items-center gap-2">
+          <button type="button" className={dateArrowButton} disabled={!olderDate} onClick={() => olderDate && setSelectedDate(olderDate)} aria-label="이전 게임" data-testid="button-ranking-date-prev">
+            <ChevronLeft size={20} />
+          </button>
+          <select id="ranking-date-select" value={shownDate} onChange={(event) => setSelectedDate(event.target.value)} className="h-11 min-w-0 flex-1 rounded-xl border border-[#dfe1ee] bg-white px-3 text-center text-sm font-bold text-[#20253a] outline-none focus:border-[#2d3d8f]" data-testid="select-ranking-date">
+            {historyDates.slice().reverse().map((date) => <option key={date} value={date}>{date}</option>)}
+          </select>
+          <button type="button" className={dateArrowButton} disabled={!newerDate} onClick={() => newerDate && setSelectedDate(newerDate)} aria-label="다음 게임" data-testid="button-ranking-date-next">
+            <ChevronRight size={20} />
+          </button>
+        </div>
         <div className="tilt-card mt-3 divide-y divide-[#ececf0]">
           {users
             .map((player) => {
@@ -1635,15 +1697,27 @@ function RankingScreen({
             .sort((a, b) => b.value - a.value)
             .map(({ player, value }) => (
               <div key={player.name} className="flex items-center gap-3 px-4 py-3" data-testid={`row-date-result-${player.name}`}>
-                <span className="flex-1 text-sm font-semibold text-[#20253a]">{player.name}</span>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-[#20253a]">{player.name}</p>
+                  {shownDetail?.buyIns && player.name in shownDetail.buyIns ? (
+                    <p className="mt-0.5 text-xs text-[#858a9b]" data-testid={`text-date-buyins-${player.name}`}>바이인 {shownDetail.buyIns[player.name]}회</p>
+                  ) : null}
+                </div>
                 <span className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-bold ${value > 0 ? 'bg-[#e5f1db] text-[#50722b]' : 'bg-[#ffe8e2] text-[#a44c3e]'}`}>{value > 0 ? '승' : '패'} <span className="mono">{value > 0 ? '+' : ''}{value}</span></span>
               </div>
             ))}
         </div>
+        {shownDetail?.buyInLog ? (
+          <button type="button" className="tilt-button mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#dfe1ee] bg-white py-2.5 text-xs font-bold text-[#2d3d8f]" data-testid="button-date-buyin-log" onClick={() => setShowDateBuyInLog(true)}>
+            <Clock3 size={14} /> 바이인 로그 보기
+          </button>
+        ) : null}
       </section>
       <button type="button" className="tilt-button mt-6 flex w-full items-center justify-between rounded-[16px] border border-dashed border-[#d8d9df] px-4 py-3 text-left hover:bg-[#f8f8f4]" data-testid="button-ranking-rule" onClick={() => window.alert('빈칸은 미참여, 0을 포함한 음수는 패배로 계산했어요.')}>
         <span className="flex items-center gap-2 text-xs font-semibold text-[#697087]"><RotateCcw size={15} /> 전적 계산 기준</span><ChevronRight size={15} className="text-[#a0a4b1]" />
       </button>
+      {/* Outside the rise-in section: its animation transform would trap the fixed overlay. */}
+      {showDateBuyInLog && shownDetail?.buyInLog ? <BuyInLogModal log={shownDetail.buyInLog} subtitle={shownDate} onClose={() => setShowDateBuyInLog(false)} /> : null}
     </div>
   );
 }

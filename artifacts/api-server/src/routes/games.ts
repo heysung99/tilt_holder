@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, gamesTable } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
 import { requireAdmin } from "../lib/admin.js";
+import { ensureGamesColumns } from "../lib/games.js";
 import { computeOverallRanking, settlementPayloads } from "../lib/notifications.js";
 import { notifyAll, pushPublicKey, senderEndpoint } from "../lib/push.js";
 
@@ -13,6 +14,7 @@ router.get("/games", async (_req, res) => {
       res.json([]);
       return;
     }
+    await ensureGamesColumns();
     const games = await db.select().from(gamesTable).orderBy(asc(gamesTable.date));
     res.json(games);
   } catch (error) {
@@ -23,7 +25,7 @@ router.get("/games", async (_req, res) => {
 
 router.post("/games", requireAdmin, async (req, res) => {
   try {
-    const { date, gameName, hostName, bankName, participantNames, results } = req.body;
+    const { date, gameName, hostName, bankName, participantNames, results, buyIns, buyInLog } = req.body;
     if (!date || !gameName || !participantNames || !results) {
       res.status(400).json({ error: "Missing required fields" });
       return;
@@ -34,6 +36,7 @@ router.post("/games", requireAdmin, async (req, res) => {
       return;
     }
 
+    await ensureGamesColumns();
     const previousGames = pushPublicKey
       ? await db.select({ date: gamesTable.date, results: gamesTable.results }).from(gamesTable)
       : null;
@@ -48,6 +51,8 @@ router.post("/games", requireAdmin, async (req, res) => {
         bankName,
         participantNames,
         results,
+        buyIns: buyIns && typeof buyIns === "object" ? buyIns : null,
+        buyInLog: Array.isArray(buyInLog) ? buyInLog : null,
       }).returning();
       return row;
     });

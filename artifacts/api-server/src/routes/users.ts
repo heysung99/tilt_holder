@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { currentSessionTable, db, gamesTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../lib/admin.js";
+import { ensureGamesColumns } from "../lib/games.js";
 
 const router: IRouter = Router();
 
@@ -17,6 +18,12 @@ function renameKey(record: unknown, from: string, to: string) {
   if (!record || typeof record !== "object" || !(from in record)) return record;
   const { [from]: value, ...rest } = record as Record<string, unknown>;
   return { ...rest, [to]: value };
+}
+
+function renameInLog(log: unknown, from: string, to: string) {
+  return Array.isArray(log)
+    ? log.map((entry: { name?: unknown }) => ({ ...entry, name: renameName(entry.name, from, to) }))
+    : log;
 }
 
 function renameInList(list: unknown, from: string, to: string) {
@@ -78,6 +85,7 @@ router.put("/users/:name", requireAdmin, async (req, res) => {
       return;
     }
 
+    await ensureGamesColumns();
     // Game results and the live session are keyed by player name, so they have to be
     // renamed together with the user — otherwise the player's history is orphaned
     // under the old name.
@@ -103,6 +111,8 @@ router.put("/users/:name", requireAdmin, async (req, res) => {
         await tx.update(gamesTable).set({
           participantNames: renameInList(game.participantNames, currentName, nextName),
           results: renameKey(game.results, currentName, nextName),
+          buyIns: renameKey(game.buyIns, currentName, nextName),
+          buyInLog: renameInLog(game.buyInLog, currentName, nextName),
           hostName: renameName(game.hostName, currentName, nextName) as string | null,
           bankName: renameName(game.bankName, currentName, nextName) as string | null,
         }).where(eq(gamesTable.id, game.id));
@@ -110,16 +120,12 @@ router.put("/users/:name", requireAdmin, async (req, res) => {
 
       const sessions = await tx.select().from(currentSessionTable);
       for (const session of sessions) {
-        const buyInLog = Array.isArray(session.buyInLog)
-          ? session.buyInLog.map((entry: { name?: unknown }) => ({ ...entry, name: renameName(entry.name, currentName, nextName) }))
-          : session.buyInLog;
-
         await tx.update(currentSessionTable).set({
           participantNames: renameInList(session.participantNames, currentName, nextName),
           buyIns: renameKey(session.buyIns, currentName, nextName),
           finalAmounts: renameKey(session.finalAmounts, currentName, nextName),
           buyInArrows: renameKey(session.buyInArrows, currentName, nextName),
-          buyInLog,
+          buyInLog: renameInLog(session.buyInLog, currentName, nextName),
           hostName: renameName(session.hostName, currentName, nextName) as string | null,
           bankName: renameName(session.bankName, currentName, nextName) as string | null,
         }).where(eq(currentSessionTable.id, session.id));
