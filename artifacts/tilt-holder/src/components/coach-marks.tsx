@@ -9,8 +9,9 @@ const FIRST_ARROW = 30;
 const ARROW_STEP = 52;
 
 // Dims the screen and points at real buttons (which the caller lifts above the dim
-// layer so they stay tappable). The rightmost target gets the shortest arrow and
-// each one further left reaches lower, so the labels never overlap.
+// layer so they stay tappable). Labels are right-aligned to their arrow, so the
+// leftmost target gets the shortest arrow and each one further right reaches lower:
+// that way no label sits across another target's arrow.
 export default function CoachMarks({ targets, onDismiss }: { targets: CoachTarget[]; onDismiss: () => void }) {
   const [placed, setPlaced] = useState<Placed[]>([]);
   const targetKey = targets.map((target) => target.testId).join('|');
@@ -23,7 +24,7 @@ export default function CoachMarks({ targets, onDismiss }: { targets: CoachTarge
           return element ? { target, rect: element.getBoundingClientRect() } : null;
         })
         .filter((item): item is { target: CoachTarget; rect: DOMRect } => item !== null)
-        .sort((a, b) => b.rect.left - a.rect.left);
+        .sort((a, b) => a.rect.left - b.rect.left);
       setPlaced(found.map(({ target, rect }, index) => ({
         ...target,
         x: rect.left + rect.width / 2,

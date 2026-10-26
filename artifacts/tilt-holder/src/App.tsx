@@ -14,6 +14,9 @@ import { ApiError, api, setAdminPassword } from '@/lib/api';
 import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 
+const headerIconButton = 'tilt-button flex items-center justify-center rounded-full border p-2.5';
+const headerIconIdle = 'border-[#dfe1ee] bg-white text-[#2d3d8f] hover:bg-[#eef0ff]';
+
 const ONBOARDING_SNOOZE_KEY = 'tilt-onboarding-snooze-until';
 const ONBOARDING_SNOOZE_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -220,11 +223,16 @@ function AppShell() {
   const pushActionable = push.state === 'off' || push.state === 'ios-needs-install';
   const [showGuide, setShowGuide] = useState(false);
   const guideCheckedRef = useRef(false);
-  const guideTargets = showGuide
+  const setupTargets = showGuide
     ? [
         ...(isInstalled ? [] : [{ testId: 'button-install-shortcut', label: '앱 저장' }]),
         ...(pushActionable ? [{ testId: 'button-push-toggle', label: '게임 실시간 소식 알림 받기' }] : []),
       ]
+    : [];
+  // The share button is pointed out alongside the setup steps but isn't a step itself,
+  // so it never keeps the guide open on its own.
+  const guideTargets = setupTargets.length
+    ? [...setupTargets, { testId: 'button-share-app', label: '앱 링크 공유' }]
     : [];
 
   useEffect(() => {
@@ -276,6 +284,24 @@ function AppShell() {
     const choice = await installPrompt.userChoice;
     setInstallPrompt(null);
     if (choice.outcome === 'accepted') setIsInstalled(true);
+  };
+
+  const handleShareApp = async () => {
+    const url = `${window.location.origin}/`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ url });
+      } catch {
+        // Share sheet dismissed.
+      }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      window.alert('앱 링크를 복사했어요.');
+    } catch {
+      window.prompt('아래 링크를 복사해주세요.', url);
+    }
   };
 
   const handleInstallClick = async () => {
@@ -689,7 +715,7 @@ function AppShell() {
             <button
               type="button"
               onClick={handleRefreshClick}
-              className="tilt-button flex items-center justify-center rounded-full border border-[#dfe1ee] bg-white p-2.5 text-[#2d3d8f] hover:bg-[#eef0ff]"
+              className={`${headerIconButton} ${headerIconIdle}`}
               data-testid="button-refresh"
               aria-label="새로고침"
             >
@@ -700,10 +726,8 @@ function AppShell() {
                 type="button"
                 onClick={push.toggle}
                 disabled={push.isBusy}
-                className={`tilt-button flex items-center justify-center rounded-full border p-2.5 disabled:opacity-50 ${isGuided('button-push-toggle') ? guidedClass : ''} ${
-                  push.state === 'on'
-                    ? 'border-[#2d3d8f] bg-[#2d3d8f] text-white hover:bg-[#202e74]'
-                    : 'border-[#dfe1ee] bg-white text-[#2d3d8f] hover:bg-[#eef0ff]'
+                className={`${headerIconButton} disabled:opacity-50 ${isGuided('button-push-toggle') ? guidedClass : ''} ${
+                  push.state === 'on' ? 'border-[#2d3d8f] bg-[#2d3d8f] text-white hover:bg-[#202e74]' : headerIconIdle
                 }`}
                 data-testid="button-push-toggle"
                 data-state={push.state}
@@ -716,12 +740,22 @@ function AppShell() {
               <button
                 type="button"
                 onClick={handleInstallClick}
-                className={`tilt-button flex items-center gap-1.5 rounded-full border border-[#dfe1ee] bg-white px-3 py-2 text-xs font-bold text-[#2d3d8f] hover:bg-[#eef0ff] ${isGuided('button-install-shortcut') ? guidedClass : ''}`}
+                className={`${headerIconButton} ${headerIconIdle} ${isGuided('button-install-shortcut') ? guidedClass : ''}`}
                 data-testid="button-install-shortcut"
+                aria-label="바로가기 저장"
               >
-                <Download size={14} /> 바로가기 저장
+                <Download size={16} />
               </button>
             )}
+            <button
+              type="button"
+              onClick={handleShareApp}
+              className={`${headerIconButton} ${headerIconIdle} ${isGuided('button-share-app') ? guidedClass : ''}`}
+              data-testid="button-share-app"
+              aria-label="앱 링크 공유"
+            >
+              <Share2 size={16} />
+            </button>
           </div>
         </header>
 
