@@ -19,6 +19,8 @@ import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 import TierBadge from '@/components/tier-badge';
 import DailyFortune from '@/components/daily-fortune';
+import HandHistorySection, { HandHistoryModal } from '@/components/hand-history';
+import { type HandHistory, renameInHand } from '@/lib/hand-history';
 
 import {
   ArrowRight,
@@ -41,6 +43,7 @@ import {
   Gamepad2,
   Landmark,
   Minus,
+  NotebookPen,
   Pencil,
   Plus,
   ReceiptText,
@@ -95,6 +98,7 @@ type BuyInLogEntry = {
 type GameDetail = {
   buyIns: Record<string, number> | null;
   buyInLog: BuyInLogEntry[] | null;
+  handHistories: HandHistory[] | null;
 };
 
 type BeforeInstallPromptEvent = Event & {
@@ -190,6 +194,7 @@ type ServerGame = {
   results: Record<string, number> | null;
   buyIns?: Record<string, number> | null;
   buyInLog?: BuyInLogEntry[] | null;
+  handHistories?: HandHistory[] | null;
 };
 
 function buildHistory(games: ServerGame[]) {
@@ -206,7 +211,7 @@ function buildHistory(games: ServerGame[]) {
   const records: HistoricalRecord[] = [...valuesByName].map(([name, values]) => ({ name, values }));
   const details: Record<string, GameDetail> = {};
   games.forEach((game) => {
-    details[game.date] = { buyIns: game.buyIns ?? null, buyInLog: game.buyInLog ?? null };
+    details[game.date] = { buyIns: game.buyIns ?? null, buyInLog: game.buyInLog ?? null, handHistories: game.handHistories ?? null };
   });
   return { dates, records, details };
 }
@@ -218,7 +223,8 @@ function renameInGameDetail(detail: GameDetail, from: string, to: string): GameD
     buyIns = { ...rest, [to]: count };
   }
   const buyInLog = detail.buyInLog?.map((entry) => entry.name === from ? { ...entry, name: to } : entry) ?? null;
-  return { buyIns, buyInLog };
+  const handHistories = detail.handHistories?.map((hand) => renameInHand(hand, from, to)) ?? null;
+  return { buyIns, buyInLog, handHistories };
 }
 
 function AppShell() {
@@ -236,6 +242,7 @@ function AppShell() {
   const [buyInEditSnapshot, setBuyInEditSnapshot] = useState<Record<string, number> | null>(null);
   const [buyInArrows, setBuyInArrows] = useState<Record<PlayerName, 'up' | 'down'>>({});
   const [buyInLog, setBuyInLog] = useState<BuyInLogEntry[]>([]);
+  const [handHistories, setHandHistories] = useState<HandHistory[]>([]);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   // True when launched from the home-screen shortcut. Browsers can't tell a regular
   // tab whether a shortcut exists, so in a normal tab the button stays visible.
@@ -391,12 +398,14 @@ function AppShell() {
         });
         setBuyInArrows(serverSession.buyInArrows ?? {});
         setBuyInLog(serverSession.buyInLog ?? []);
+        setHandHistories(Array.isArray(serverSession.handHistories) ? serverSession.handHistories : []);
       } else {
         // Without this, a phone still showing a game someone else already settled
         // would recreate it on the server the next time buy-ins are saved.
         setSession(initialSession);
         setBuyInArrows({});
         setBuyInLog([]);
+        setHandHistories([]);
         setIsEditingBuyIns(false);
         setBuyInEditSnapshot(null);
       }
@@ -496,6 +505,7 @@ function AppShell() {
     setSession(newSession);
     setBuyInArrows({});
     setBuyInLog([]);
+    setHandHistories([]);
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
     clearExpenses();
@@ -574,6 +584,7 @@ function AppShell() {
     setUsers((current) => current.map((user) => user.name === currentName ? { ...user, name: trimmedName } : user));
     setHistoricalRecords((current) => current.map((record) => record.name === currentName ? { ...record, name: trimmedName } : record));
     setGameDetails((current) => Object.fromEntries(Object.entries(current).map(([date, detail]) => [date, renameInGameDetail(detail, currentName, trimmedName)])));
+    setHandHistories((current) => current.map((hand) => renameInHand(hand, currentName, trimmedName)));
     api(`/api/users/${encodeURIComponent(currentName)}`, {
       method: 'PUT',
       body: { nextName: trimmedName },
@@ -637,7 +648,7 @@ function AppShell() {
       participantBuyIns[name] = session.buyIns[name] ?? 0;
     });
 
-    api('/api/games', {
+    const gameSaved = api('/api/games', {
       method: 'POST',
       body: {
         date: session.date,
@@ -648,10 +659,11 @@ function AppShell() {
         results: participantResultsObj,
         buyIns: participantBuyIns,
         buyInLog,
+        handHistories,
       },
       admin: true,
-    }).catch(handleSyncError);
-    setGameDetails((current) => ({ ...current, [targetDate]: { buyIns: participantBuyIns, buyInLog } }));
+    });
+    setGameDetails((current) => ({ ...current, [targetDate]: { buyIns: participantBuyIns, buyInLog, handHistories: handHistories.length > 0 ? handHistories : null } }));
 
     setHistoryDates((currentDates) => {
       const dateIndex = currentDates.indexOf(targetDate);
@@ -709,7 +721,21 @@ function AppShell() {
     setBuyInLog([]);
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
-    api('/api/session', { method: 'DELETE', admin: true }).catch(handleSyncError);
+    setHandHistories([]);
+    // The game copies the session's hand histories, so only clear the session once it's saved.
+    gameSaved.then(() => api('/api/session', { method: 'DELETE', admin: true })).catch(handleSyncError);
+  };
+
+  const recordHand = (hand: HandHistory) => {
+    setHandHistories((current) => [...current, hand]);
+    api('/api/session/history', { method: 'POST', body: { date: session.date, hand } }).catch(handleSyncError);
+  };
+
+  const deleteHand = (hand: HandHistory) => {
+    verifyPassword('핸드 기록 삭제', () => {
+      setHandHistories((current) => current.filter((item) => item.id !== hand.id));
+      api(`/api/session/history/${encodeURIComponent(hand.id)}`, { method: 'DELETE', admin: true }).catch(handleSyncError);
+    });
   };
 
   const deleteHistoryDate = (dateToDelete: string) => {
@@ -806,6 +832,9 @@ function AppShell() {
             isEditingBuyIns={isEditingBuyIns}
             buyInArrows={buyInArrows}
             buyInLog={buyInLog}
+            handHistories={handHistories}
+            onRecordHand={recordHand}
+            onDeleteHand={deleteHand}
             onStartEditBuyIns={startEditingBuyIns}
             onFinishEditBuyIns={finishEditingBuyIns}
             onVerifyPassword={verifyPassword}
@@ -896,6 +925,9 @@ function GameScreen({
   isEditingBuyIns,
   buyInArrows,
   buyInLog,
+  handHistories,
+  onRecordHand,
+  onDeleteHand,
   onStartEditBuyIns,
   onFinishEditBuyIns,
   onVerifyPassword,
@@ -911,6 +943,9 @@ function GameScreen({
   isEditingBuyIns: boolean;
   buyInArrows: Record<PlayerName, 'up' | 'down'>;
   buyInLog: BuyInLogEntry[];
+  handHistories: HandHistory[];
+  onRecordHand: (hand: HandHistory) => void;
+  onDeleteHand: (hand: HandHistory) => void;
   onStartEditBuyIns: () => void;
   onFinishEditBuyIns: () => void;
   onVerifyPassword: (title: string, onSuccess: () => void) => void;
@@ -1102,6 +1137,14 @@ function GameScreen({
           바이인 Log
         </button>
       </section>
+
+      <HandHistorySection
+        participants={session.participantNames}
+        hands={handHistories}
+        canRecord={isSessionInProgress}
+        onRecord={onRecordHand}
+        onDelete={onDeleteHand}
+      />
 
       {showBuyInLog ? <BuyInLogModal log={buyInLog} onClose={() => setShowBuyInLog(false)} /> : null}
       <Suspense fallback={playerAnalysisFallback}>
@@ -1394,6 +1437,7 @@ function RankingScreen({
   const [showTierTable, setShowTierTable] = useState(false);
   const [selectedPlayerName, setSelectedPlayerName] = useState<PlayerName | null>(null);
   const [showDateBuyInLog, setShowDateBuyInLog] = useState(false);
+  const [showDateHands, setShowDateHands] = useState(false);
   const [showUnranked, setShowUnranked] = useState(false);
   const rankingCardRef = useRef<HTMLElement>(null);
 
@@ -1773,6 +1817,12 @@ function RankingScreen({
               );
             })}
           </div>
+          {shownDetail?.handHistories?.length ? (
+            <button type="button" className="tilt-button flex w-full items-center justify-between border-t border-[#ececf0] px-4 py-3 text-xs font-bold text-[#2d3d8f] hover:bg-[#f6f7ff]" data-testid="button-date-hands" onClick={() => setShowDateHands(true)}>
+              <span className="flex items-center gap-1.5"><NotebookPen size={14} /> 게임 히스토리 <span className="font-semibold text-[#858a9b]">{shownDetail.handHistories.length}핸드</span></span>
+              <ChevronRight size={15} className="text-[#a0a4b1]" />
+            </button>
+          ) : null}
           {shownDetail?.buyInLog ? (
             <button type="button" className="tilt-button flex w-full items-center justify-between border-t border-[#ececf0] px-4 py-3 text-xs font-bold text-[#2d3d8f] hover:bg-[#f6f7ff]" data-testid="button-date-buyin-log" onClick={() => setShowDateBuyInLog(true)}>
               <span className="flex items-center gap-1.5"><Clock3 size={14} /> 바이인 로그</span>
@@ -1786,6 +1836,7 @@ function RankingScreen({
       </button>
       {/* Outside the rise-in section: its animation transform would trap the fixed overlay. */}
       {showDateBuyInLog && shownDetail?.buyInLog ? <BuyInLogModal log={shownDetail.buyInLog} subtitle={shownDate} onClose={() => setShowDateBuyInLog(false)} /> : null}
+      {showDateHands && shownDetail?.handHistories ? <HandHistoryModal hands={shownDetail.handHistories} subtitle={shownDate} onClose={() => setShowDateHands(false)} /> : null}
     </div>
   );
 }

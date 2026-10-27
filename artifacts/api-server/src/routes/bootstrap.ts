@@ -8,7 +8,7 @@ import {
   usersTable,
 } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
-import { ensureGamesColumns } from "../lib/games.js";
+import { ensureColumns } from "../lib/columns.js";
 import { SESSION_ID } from "./session.js";
 
 const router: IRouter = Router();
@@ -22,7 +22,7 @@ router.get("/bootstrap", async (_req, res) => {
       return;
     }
 
-    await ensureGamesColumns();
+    await ensureColumns();
     const [users, expenses, fund, games, sessions] = await Promise.all([
       db.select().from(usersTable),
       db.select().from(expensesTable),

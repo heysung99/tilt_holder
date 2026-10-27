@@ -1,8 +1,10 @@
 import { Router, type IRouter } from "express";
-import { db, gamesTable } from "@workspace/db";
+import { currentSessionTable, db, gamesTable } from "@workspace/db";
 import { asc, eq } from "drizzle-orm";
 import { requireAdmin } from "../lib/admin.js";
-import { ensureGamesColumns } from "../lib/games.js";
+import { ensureColumns } from "../lib/columns.js";
+import { mergeHands } from "../lib/hand-history.js";
+import { SESSION_ID } from "./session.js";
 import { computeOverallRanking, settlementPayloads } from "../lib/notifications.js";
 import { notifyAll, pushPublicKey, senderEndpoint } from "../lib/push.js";
 
@@ -14,7 +16,7 @@ router.get("/games", async (_req, res) => {
       res.json([]);
       return;
     }
-    await ensureGamesColumns();
+    await ensureColumns();
     const games = await db.select().from(gamesTable).orderBy(asc(gamesTable.date));
     res.json(games);
   } catch (error) {
@@ -25,7 +27,7 @@ router.get("/games", async (_req, res) => {
 
 router.post("/games", requireAdmin, async (req, res) => {
   try {
-    const { date, gameName, hostName, bankName, participantNames, results, buyIns, buyInLog } = req.body;
+    const { date, gameName, hostName, bankName, participantNames, results, buyIns, buyInLog, handHistories } = req.body;
     if (!date || !gameName || !participantNames || !results) {
       res.status(400).json({ error: "Missing required fields" });
       return;
@@ -36,10 +38,16 @@ router.post("/games", requireAdmin, async (req, res) => {
       return;
     }
 
-    await ensureGamesColumns();
+    await ensureColumns();
     const previousGames = pushPublicKey
       ? await db.select({ date: gamesTable.date, results: gamesTable.results }).from(gamesTable)
       : null;
+
+    // The server's copy of the hands is the complete one (they're appended one by one);
+    // the app's copy covers a session that was already cleared.
+    const [session] = await db.select({ date: currentSessionTable.date, handHistories: currentSessionTable.handHistories })
+      .from(currentSessionTable).where(eq(currentSessionTable.id, SESSION_ID));
+    const hands = mergeHands(session?.date === date ? session.handHistories : [], handHistories);
 
     // Replace the game for this date atomically so a failed insert can't leave the date wiped.
     const inserted = await db.transaction(async (tx) => {
@@ -53,6 +61,7 @@ router.post("/games", requireAdmin, async (req, res) => {
         results,
         buyIns: buyIns && typeof buyIns === "object" ? buyIns : null,
         buyInLog: Array.isArray(buyInLog) ? buyInLog : null,
+        handHistories: hands.length > 0 ? hands : null,
       }).returning();
       return row;
     });

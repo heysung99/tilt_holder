@@ -4,3 +4,4 @@ export * from "./expenses.js";
 export * from "./fund.js";
 export * from "./session.js";
 export * from "./push.js";
+export * from "./columns.js";

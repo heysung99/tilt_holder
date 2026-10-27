@@ -2,7 +2,8 @@ import { Router, type IRouter } from "express";
 import { currentSessionTable, db, gamesTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "../lib/admin.js";
-import { ensureGamesColumns } from "../lib/games.js";
+import { ensureColumns } from "../lib/columns.js";
+import { renameInHands } from "../lib/hand-history.js";
 
 const router: IRouter = Router();
 
@@ -85,7 +86,7 @@ router.put("/users/:name", requireAdmin, async (req, res) => {
       return;
     }
 
-    await ensureGamesColumns();
+    await ensureColumns();
     // Game results and the live session are keyed by player name, so they have to be
     // renamed together with the user — otherwise the player's history is orphaned
     // under the old name.
@@ -113,6 +114,7 @@ router.put("/users/:name", requireAdmin, async (req, res) => {
           results: renameKey(game.results, currentName, nextName),
           buyIns: renameKey(game.buyIns, currentName, nextName),
           buyInLog: renameInLog(game.buyInLog, currentName, nextName),
+          handHistories: renameInHands(game.handHistories, currentName, nextName),
           hostName: renameName(game.hostName, currentName, nextName) as string | null,
           bankName: renameName(game.bankName, currentName, nextName) as string | null,
         }).where(eq(gamesTable.id, game.id));
@@ -126,6 +128,7 @@ router.put("/users/:name", requireAdmin, async (req, res) => {
           finalAmounts: renameKey(session.finalAmounts, currentName, nextName),
           buyInArrows: renameKey(session.buyInArrows, currentName, nextName),
           buyInLog: renameInLog(session.buyInLog, currentName, nextName),
+          handHistories: renameInHands(session.handHistories, currentName, nextName),
           hostName: renameName(session.hostName, currentName, nextName) as string | null,
           bankName: renameName(session.bankName, currentName, nextName) as string | null,
         }).where(eq(currentSessionTable.id, session.id));

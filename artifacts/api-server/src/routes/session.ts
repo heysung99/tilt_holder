@@ -1,7 +1,9 @@
 import { Router, type IRouter } from "express";
-import { db, currentSessionTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, currentSessionTable, pool } from "@workspace/db";
+import { eq, sql } from "drizzle-orm";
 import { hasValidAdminPassword, requireAdmin } from "../lib/admin.js";
+import { ensureColumns } from "../lib/columns.js";
+import { MAX_HANDS_PER_GAME, handRecordedPayload, parseHand } from "../lib/hand-history.js";
 import { buyInChangePayload, gameCreatedPayload } from "../lib/notifications.js";
 import { notifyAll, pushPublicKey, senderEndpoint, type PushPayload } from "../lib/push.js";
 
@@ -14,6 +16,7 @@ router.get("/session", async (_req, res) => {
       res.json(null);
       return;
     }
+    await ensureColumns();
     const [session] = await db
       .select()
       .from(currentSessionTable)
@@ -54,6 +57,7 @@ router.put("/session", async (req, res) => {
       updatedAt: new Date(),
     };
 
+    await ensureColumns();
     const [previous] = pushPublicKey
       ? await db.select().from(currentSessionTable).where(eq(currentSessionTable.id, SESSION_ID))
       : [];
@@ -63,7 +67,15 @@ router.put("/session", async (req, res) => {
       .values(values)
       .onConflictDoUpdate({
         target: currentSessionTable.id,
-        set: values,
+        // Hand histories are appended through /session/history, never through this
+        // whole-session save, so a phone with a stale copy can't drop anyone's
+        // hands. They're only cleared when a new game starts.
+        set: {
+          ...values,
+          handHistories: req.body.notify === "created"
+            ? sql`'[]'::jsonb`
+            : sql.raw(`CASE WHEN "current_session"."date" = excluded."date" THEN "current_session"."hand_histories" ELSE '[]'::jsonb END`),
+        },
       })
       .returning();
 
@@ -81,6 +93,73 @@ router.put("/session", async (req, res) => {
   } catch (error) {
     console.error("Failed to save current session:", error);
     res.status(500).json({ error: "Failed to save current session" });
+  }
+});
+
+// Appends one recorded hand to the game in progress. Open to everyone, like buy-ins.
+router.post("/session/history", async (req, res) => {
+  try {
+    const hand = parseHand(req.body?.hand);
+    const date = req.body?.date;
+    if (!hand || typeof date !== "string") {
+      res.status(400).json({ error: "Invalid hand" });
+      return;
+    }
+    if (!pool) {
+      res.status(503).json({ error: "Database not available" });
+      return;
+    }
+    await ensureColumns();
+
+    const result = await pool.query(
+      `UPDATE current_session
+         SET hand_histories = hand_histories || $1::jsonb
+       WHERE id = $2 AND date = $3
+         AND jsonb_array_length(hand_histories) < $4
+         AND NOT hand_histories @> $5::jsonb
+       RETURNING jsonb_array_length(hand_histories) AS count`,
+      [JSON.stringify([hand]), SESSION_ID, date, MAX_HANDS_PER_GAME, JSON.stringify([{ id: hand.id }])],
+    );
+
+    if (result.rowCount === 0) {
+      const existing = await pool.query(
+        `SELECT 1 FROM current_session WHERE id = $1 AND date = $2 AND hand_histories @> $3::jsonb`,
+        [SESSION_ID, date, JSON.stringify([{ id: hand.id }])],
+      );
+      // A retry of a hand that's already saved is fine; anything else means the
+      // game ended, a different game started or the hand limit was reached.
+      if (existing.rowCount) res.json({ success: true });
+      else res.status(409).json({ error: "No matching game in progress" });
+      return;
+    }
+
+    res.status(201).json({ success: true });
+    if (pushPublicKey) notifyAll([handRecordedPayload(hand, Number(result.rows[0].count))], senderEndpoint(req));
+  } catch (error) {
+    console.error("Failed to record hand:", error);
+    res.status(500).json({ error: "Failed to record hand" });
+  }
+});
+
+router.delete("/session/history/:id", requireAdmin, async (req, res) => {
+  try {
+    if (!pool) {
+      res.status(503).json({ error: "Database not available" });
+      return;
+    }
+    await ensureColumns();
+    await pool.query(
+      `UPDATE current_session
+         SET hand_histories = COALESCE(
+           (SELECT jsonb_agg(hand) FROM jsonb_array_elements(hand_histories) AS hand WHERE hand->>'id' <> $1),
+           '[]'::jsonb)
+       WHERE id = $2`,
+      [String(req.params.id), SESSION_ID],
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete hand:", error);
+    res.status(500).json({ error: "Failed to delete hand" });
   }
 });
 

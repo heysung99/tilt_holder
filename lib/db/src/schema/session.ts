@@ -10,6 +10,8 @@ export const currentSessionTable = pgTable("current_session", {
   finalAmounts: jsonb("final_amounts").notNull(),
   buyInArrows: jsonb("buy_in_arrows").notNull().default({}),
   buyInLog: jsonb("buy_in_log").notNull().default([]),
+  // Hand histories recorded during the game; appended one at a time by the API.
+  handHistories: jsonb("hand_histories").notNull().default([]),
   hostName: text("host_name"),
   bankName: text("bank_name"),
   isFinished: boolean("is_finished").notNull().default(false),
