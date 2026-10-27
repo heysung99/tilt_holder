@@ -177,6 +177,16 @@ function HandRecorder({
     setActor(null);
   };
   const toggleSeat = (name: string) => setSeats(hand.seats.includes(name) ? hand.seats.filter((seat) => seat !== name) : [...hand.seats, name]);
+  // Once the seating order is set, only the dealer changes from hand to hand: picking
+  // them rotates the order so they're first (BTN) and every position follows.
+  const [editingSeats, setEditingSeats] = useState(hand.seats.length < 2);
+  const setDealer = (name: string) => {
+    const index = hand.seats.indexOf(name);
+    if (index > 0) setSeats([...hand.seats.slice(index), ...hand.seats.slice(0, index)]);
+  };
+  const firstSeated = participants.find((name) => hand.seats.includes(name));
+  const tableStart = firstSeated ? hand.seats.indexOf(firstSeated) : 0;
+  const tableOrder = [...hand.seats.slice(tableStart), ...hand.seats.slice(0, tableStart)];
 
   const addAction = (type: ActionType, value?: number) => {
     if (!currentActor) return;
@@ -256,46 +266,70 @@ function HandRecorder({
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {step === 'seats' ? (
             <div>
-              <p className="text-sm font-bold text-[#20253a]">딜러(BTN)부터 시계방향으로 이름을 누르세요</p>
-              <p className="mt-0.5 text-xs text-[#858a9b]">한 번 더 누르면 빠져요. 이 핸드에 앉은 사람만 고르면 돼요.</p>
-              {previous?.seats.length ? (
-                <p className="mt-2 rounded-lg bg-[#f3f4ff] px-2.5 py-1.5 text-[11px] font-semibold text-[#2d3d8f]" data-testid="text-seats-carried">지난 핸드 자리를 그대로 불러왔어요. 바꾸면 다음부터 바뀐 자리로 시작해요.</p>
-              ) : null}
-              {hand.seats.length > 1 ? (
-                <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={() => setSeats([...hand.seats.slice(1), hand.seats[0]])} className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-[#d5d8e6] bg-[#f3f4ff] py-2 text-xs font-bold text-[#2d3d8f]" data-testid="button-rotate-dealer">
-                    <RotateCw size={13} /> 딜러 한 칸 넘기기
-                  </button>
-                  <button type="button" onClick={() => setSeats([])} className="rounded-xl border border-[#e4e5ea] px-3 py-2 text-xs font-bold text-[#596078]" data-testid="button-clear-seats">처음부터</button>
-                </div>
-              ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
-                {participants.map((name) => {
-                  const index = hand.seats.indexOf(name);
-                  return (
-                    <button
-                      key={name}
-                      type="button"
-                      onClick={() => toggleSeat(name)}
-                      className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-bold ${index >= 0 ? 'border-[#2d3d8f] bg-[#2d3d8f] text-white' : 'border-[#dfe1ee] bg-white text-[#20253a]'}`}
-                      data-testid={`seat-${name}`}
-                    >
-                      {index >= 0 ? <span className="mono rounded-md bg-white/20 px-1 text-[10px]">{index + 1}</span> : null}
-                      {name}
-                    </button>
-                  );
-                })}
-              </div>
-              {hand.seats.length > 0 ? (
-                <div className="mt-4 rounded-2xl bg-[#f6f6f1] p-3">
-                  <p className="text-[11px] font-bold text-[#9a8f4a]">포지션</p>
-                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
-                    {hand.seats.map((name, index) => (
-                      <p key={name} className="flex items-center gap-2 text-sm"><span className="mono w-14 shrink-0 text-[11px] font-bold text-[#2d3d8f]">{positions[index]}</span><span className="font-bold text-[#20253a]">{name}</span></p>
-                    ))}
+              {editingSeats ? (
+                <>
+                  <p className="text-sm font-bold text-[#20253a]">앉은 순서대로(시계방향) 이름을 누르세요</p>
+                  <p className="mt-0.5 text-xs text-[#858a9b]">처음 누른 사람이 딜러가 돼요. 한 번 더 누르면 빠져요. 이 순서는 다음 핸드에도 이어져요.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {participants.map((name) => {
+                      const index = hand.seats.indexOf(name);
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => toggleSeat(name)}
+                          className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-bold ${index >= 0 ? 'border-[#2d3d8f] bg-[#2d3d8f] text-white' : 'border-[#dfe1ee] bg-white text-[#20253a]'}`}
+                          data-testid={`seat-${name}`}
+                        >
+                          {index >= 0 ? <span className="mono rounded-md bg-white/20 px-1 text-[10px]">{index + 1}</span> : null}
+                          {name}
+                        </button>
+                      );
+                    })}
                   </div>
-                </div>
-              ) : null}
+                  <div className="mt-3 flex gap-2">
+                    {hand.seats.length > 0 ? (
+                      <button type="button" onClick={() => setSeats([])} className="rounded-xl border border-[#e4e5ea] px-3 py-2 text-xs font-bold text-[#596078]" data-testid="button-clear-seats">처음부터</button>
+                    ) : null}
+                    {hand.seats.length > 1 ? (
+                      <button type="button" onClick={() => setEditingSeats(false)} className="flex-1 rounded-xl bg-[#eef0ff] py-2 text-xs font-bold text-[#2d3d8f]" data-testid="button-seats-done">순서 완료 → 딜러 고르기</button>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-bold text-[#20253a]">딜러 버튼을 가진 사람을 누르세요</p>
+                  <p className="mt-0.5 text-xs text-[#858a9b]">앉은 순서대로 SB·BB·UTG… 포지션이 자동으로 정해져요.</p>
+                  {previous?.seats.length ? (
+                    <p className="mt-2 rounded-lg bg-[#f3f4ff] px-2.5 py-1.5 text-[11px] font-semibold text-[#2d3d8f]" data-testid="text-seats-carried">지난 핸드의 앉은 순서를 불러왔어요.</p>
+                  ) : null}
+                  {/* Shown in a fixed seating order, so picking a new dealer doesn't reshuffle the chips. */}
+                  <div className="mt-3 grid grid-cols-3 gap-2" data-testid="dealer-picker">
+                    {tableOrder.map((name) => {
+                      const isDealer = hand.seats[0] === name;
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => setDealer(name)}
+                          className={`relative rounded-xl border px-2 py-2 text-center ${isDealer ? 'border-[#2d3d8f] bg-[#2d3d8f] text-white' : 'border-[#dfe1ee] bg-white text-[#20253a]'}`}
+                          data-testid={`dealer-${name}`}
+                        >
+                          {isDealer ? <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#e9ef76] text-[10px] font-extrabold text-[#2d3d8f] shadow">D</span> : null}
+                          <span className="block truncate text-sm font-bold">{name}</span>
+                          <span className={`mono block text-[10px] font-bold ${isDealer ? 'text-[#cbd1f2]' : 'text-[#2d3d8f]'}`}>{positionOf(hand, name)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    <button type="button" onClick={() => setSeats([...hand.seats.slice(1), hand.seats[0]])} className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-[#d5d8e6] bg-[#f3f4ff] py-2 text-xs font-bold text-[#2d3d8f]" data-testid="button-rotate-dealer">
+                      <RotateCw size={13} /> 딜러 한 칸 넘기기
+                    </button>
+                    <button type="button" onClick={() => setEditingSeats(true)} className="rounded-xl border border-[#e4e5ea] px-3 py-2 text-xs font-bold text-[#596078]" data-testid="button-edit-seats">앉은 순서 바꾸기</button>
+                  </div>
+                </>
+              )}
               <div className="mt-4">
                 <p className="text-xs font-bold text-[#596078]">블라인드 (선택)</p>
                 <div className="mt-1.5 grid grid-cols-2 gap-2">
