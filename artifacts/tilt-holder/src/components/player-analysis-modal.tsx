@@ -104,7 +104,7 @@ export default function PlayerAnalysisModal({
               <button type="button" data-share-exclude="true" onClick={() => setView(view === 'pick' ? 'stats' : 'pick')} className="-ml-1.5 rounded-full p-1 text-[#697087] hover:bg-[#f1f1ee]" aria-label="뒤로" data-testid="button-matchup-back">
                 <ChevronLeft size={18} />
               </button>
-              <h3 className="text-lg font-bold text-[#20253a]">{view === 'pick' ? '상성 확인' : <>{playerName} <span className="text-sm text-[#a0a4b1]">vs</span> {view.opponent}</>}</h3>
+              <h3 className="text-lg font-bold text-[#20253a]">{view === 'pick' ? <>{playerName}<span className="text-[#596078]">의 상성</span></> : <>{playerName} <span className="text-sm text-[#a0a4b1]">vs</span> {view.opponent}</>}</h3>
             </div>
           )}
           <div data-share-date-slot="true" className="flex items-center justify-end gap-2">
