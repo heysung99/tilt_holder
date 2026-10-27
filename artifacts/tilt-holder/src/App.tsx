@@ -1366,9 +1366,6 @@ function TierTableModal({ totalRanked, onClose }: { totalRanked: number; onClose
   );
 }
 
-// Wide enough for the longest tier badge (그랜드마스터) at size xs.
-const DATE_TIER_COLUMN = 'w-[70px]';
-
 function RankingScreen({
   users,
   historyDates,
@@ -1726,7 +1723,10 @@ function RankingScreen({
               <ChevronRight size={20} />
             </button>
           </div>
-          <div className="divide-y divide-[#ececf0]">
+          {/* Rows share the list's columns (subgrid), so each tier column is as wide as its
+              widest badge on this date and every row's arrow lines up. Very narrow
+              screens scroll sideways rather than overlap, like the ranking card. */}
+          <div className="grid grid-cols-[auto_auto_auto_auto_1fr_auto] divide-y divide-[#ececf0] overflow-x-auto">
             {dateResults.map(({ player, value }) => {
               const after = tiersAfterDate.get(player.name)?.tier ?? null;
               const before = tiersBeforeDate.get(player.name)?.tier ?? null;
@@ -1737,30 +1737,29 @@ function RankingScreen({
                 : tierLevel(after.label) - tierLevel(before.label);
               const buyInCount = shownDetail?.buyIns?.[player.name];
               return (
-                <div key={player.name} className="flex items-center gap-2 px-3.5 py-3" data-testid={`row-date-result-${player.name}`}>
-                  <span className="w-[42px] shrink-0 truncate text-sm font-bold text-[#20253a]">{player.name}</span>
-                  {/* Fixed-width columns keep every row's arrow in the same place. */}
-                  <div className="flex min-w-0 flex-1 items-center gap-0.5" data-testid={`tier-change-${player.name}`}>
-                    <TierBadge tier={tierShift === 0 ? after : before} size="xs" className={DATE_TIER_COLUMN} />
-                    <span className="flex w-[18px] shrink-0 justify-center">
-                      {tierShift === 0 ? (
-                        <Equal size={13} strokeWidth={2.5} className="text-[#b4b8c4]" aria-label="티어 유지" />
-                      ) : (
-                        <ArrowRight size={13} strokeWidth={2.5} className={tierShift > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'} aria-label={tierShift > 0 ? '티어 상승' : '티어 하락'} />
-                      )}
-                    </span>
+                <div key={player.name} className="col-span-full grid grid-cols-subgrid items-center px-3.5 py-3 max-[379px]:px-2.5" data-testid={`row-date-result-${player.name}`}>
+                  <span className="whitespace-nowrap pr-2 text-sm font-bold text-[#20253a] max-[379px]:pr-1">{player.name}</span>
+                  <TierBadge tier={tierShift === 0 ? after : before} className="justify-self-start" />
+                  <span className="flex justify-center px-0.5 max-[379px]:px-0" data-testid={`tier-change-${player.name}`}>
                     {tierShift === 0 ? (
-                      <span className={`${DATE_TIER_COLUMN} shrink-0 text-[10px] font-bold text-[#a0a4b1]`}>유지</span>
+                      <Equal size={13} strokeWidth={2.5} className="text-[#b4b8c4]" aria-label="티어 유지" />
                     ) : (
-                      <TierBadge tier={after} size="xs" className={DATE_TIER_COLUMN} />
+                      <ArrowRight size={13} strokeWidth={2.5} className={tierShift > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'} aria-label={tierShift > 0 ? '티어 상승' : '티어 하락'} />
                     )}
-                  </div>
-                  <div className="shrink-0 text-right">
-                    <p className={`mono text-[14px] font-bold tracking-[-0.04em] ${value > 0 ? 'text-[#3f7a1f]' : value < 0 ? 'text-[#c0392b]' : 'text-[#858a9b]'}`} data-testid={`text-date-amount-${player.name}`}>
-                      {formatManwon(value)}
+                  </span>
+                  {tierShift === 0 ? (
+                    <span className="text-[10px] font-bold text-[#a0a4b1]">유지</span>
+                  ) : (
+                    <TierBadge tier={after} className="justify-self-start" />
+                  )}
+                  <span />
+                  <div className="pl-2 text-right max-[379px]:pl-1">
+                    {/* Narrow phones (Galaxy, 360px) drop the trailing 원 so two badges still fit. */}
+                    <p className={`mono whitespace-nowrap text-[14px] font-bold tracking-[-0.04em] max-[379px]:text-[13px] ${value > 0 ? 'text-[#3f7a1f]' : value < 0 ? 'text-[#c0392b]' : 'text-[#858a9b]'}`} data-testid={`text-date-amount-${player.name}`}>
+                      {formatManwon(value).slice(0, -1)}<span className="max-[379px]:hidden">원</span>
                     </p>
                     {buyInCount !== undefined ? (
-                      <p className="mt-0.5 text-[11px] text-[#858a9b]" data-testid={`text-date-buyins-${player.name}`}>바이인 {buyInCount}회</p>
+                      <p className="mt-0.5 whitespace-nowrap text-[11px] text-[#858a9b]" data-testid={`text-date-buyins-${player.name}`}>바이인 {buyInCount}회</p>
                     ) : null}
                   </div>
                 </div>
