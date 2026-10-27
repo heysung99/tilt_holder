@@ -27,6 +27,7 @@ import {
 const RANKS_DESC = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3', '2'];
 const SUITS: Suit[] = ['s', 'h', 'd', 'c'];
 const QUICK_ADD = [1000, 5000, 10000, 50000];
+const DEFAULT_BLINDS = { sb: 500, bb: 500 };
 const sameCard = (a: Card, b: Card) => a.rank === b.rank && a.suit === b.suit;
 const formatTime = (iso: string) => new Date(iso).toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' });
 
@@ -137,7 +138,8 @@ function HandRecorder({
   onSave: (hand: HandHistory) => void;
   onClose: () => void;
 }) {
-  const [hand, setHand] = useState<HandHistory>(() => emptyHand([], previous?.blinds ?? null));
+  // Blinds carry over from the last hand with seats; the table's usual 500/500 otherwise.
+  const [hand, setHand] = useState<HandHistory>(() => emptyHand([], previous?.blinds ?? DEFAULT_BLINDS));
   const [step, setStep] = useState<Step>('seats');
   const [street, setStreet] = useState<Street>('preflop');
   const [actor, setActor] = useState<string | null>(null);
