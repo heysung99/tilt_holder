@@ -12,6 +12,7 @@ import {
   localDateKey,
   peekTodayDraw,
   rankLabel,
+  splitSentences,
 } from '@/lib/daily-fortune';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -74,19 +75,34 @@ const SPARKLES = [
   { dx: '0px', dy: '-70px', delay: '120ms' },
 ];
 
+// One sentence per line; quoted text gets its opening and closing marks on the
+// first and last lines.
+function Sentences({ text, quoted = false }: { text: string; quoted?: boolean }) {
+  const sentences = splitSentences(text);
+  return (
+    <>
+      {sentences.map((sentence, index) => (
+        <span key={index} className="block">
+          {quoted && index === 0 ? '“' : ''}{sentence}{quoted && index === sentences.length - 1 ? '”' : ''}
+        </span>
+      ))}
+    </>
+  );
+}
+
 function FortuneText({ fortune }: { fortune: string }) {
   const tazza = findTazzaLine(fortune);
   return tazza ? (
     <>
       <p className="text-[11px] font-bold text-[#9a8f4a]">🎬 타짜 명대사</p>
-      <p className="mt-2 break-keep text-lg font-extrabold leading-snug tracking-[-0.03em] text-[#20253a]">“{tazza.quote}”</p>
+      <p className="mt-2 break-keep text-lg font-extrabold leading-snug tracking-[-0.03em] text-[#20253a]"><Sentences text={tazza.quote} quoted /></p>
       <p className="mt-1 text-xs font-semibold text-[#858a9b]">— {tazza.by}</p>
-      <p className="mt-3 break-keep text-sm font-medium leading-relaxed text-[#4a5068]">{tazza.twist}</p>
+      <p className="mt-3 break-keep text-sm font-medium leading-relaxed text-[#4a5068]"><Sentences text={tazza.twist} /></p>
     </>
   ) : (
     <>
       <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#9a8f4a]">fortune</p>
-      <p className="mt-1.5 break-keep text-[15px] font-semibold leading-relaxed text-[#20253a]">“{fortune}”</p>
+      <p className="mt-1.5 break-keep text-[15px] font-semibold leading-relaxed text-[#20253a]"><Sentences text={fortune} quoted /></p>
     </>
   );
 }
@@ -173,12 +189,19 @@ function FortuneModal({ draw, reveal, onClose }: { draw: DailyDraw; reveal: bool
             <div className={reveal ? 'luck-fade-up' : ''}>
               <div className="text-center" data-testid="text-daily-hand">
                 <p className="text-lg font-extrabold tracking-[-0.03em] text-[#20253a]">{hand.name}</p>
-                <p className="mt-1 break-keep text-[13px] font-medium text-[#697087]">{hand.comment}</p>
+                <p className="mt-1 break-keep text-[13px] font-medium text-[#697087]"><Sentences text={hand.comment} /></p>
               </div>
               <div className="mt-4 rounded-2xl bg-[#f6f6f1] px-4 py-4" data-testid="text-daily-fortune">
                 <FortuneText fortune={draw.fortune} />
               </div>
-              <p className="mt-4 text-center text-[11px] text-[#9aa0ae]">{isCapturing ? 'TILT HOLDER · 오늘의 운세 & 핸드' : '하루에 한 번만 뽑혀요. 내일 새로운 운세를 확인하세요!'}</p>
+              {isCapturing ? (
+                <p className="mt-4 text-center text-[11px] text-[#9aa0ae]">TILT HOLDER · 오늘의 운세 & 핸드</p>
+              ) : (
+                <p className="mt-4 text-center text-[11px] leading-relaxed text-[#9aa0ae]" data-testid="text-fortune-note">
+                  <span className="block font-semibold text-[#858a9b]">플레이어마다 운세가 다릅니다.</span>
+                  <span className="block">하루에 한 번만 뽑혀요. 내일 새로운 운세를 확인하세요!</span>
+                </p>
+              )}
             </div>
           ) : (
             <p className="pt-16 text-center text-sm font-semibold text-[#9aa0ae]">오늘의 패를 뒤집는 중…</p>
@@ -216,6 +239,7 @@ export default function DailyFortune() {
           <span>
             <span className="mono block text-[10px] font-bold uppercase tracking-[0.16em] text-[#9a8f4a]">today's luck</span>
             <span className="mt-1 block text-base font-bold text-[#20253a]">오늘의 운세 & 핸드 보기</span>
+            <span className="mt-0.5 block text-[11px] text-[#858a9b]">플레이어마다 운세가 다릅니다</span>
           </span>
           <span className="flex items-center">
             <PlayingCard card={null} size="mini" className="-rotate-6" />
@@ -253,10 +277,10 @@ function TodayCard({ draw, onOpen }: { draw: DailyDraw; onOpen: () => void }) {
           <>
             <span className="font-bold text-[#20253a]">“{tazza.quote}”</span>
             <span className="text-[#858a9b]"> — {tazza.by}</span>
-            <span className="block">{tazza.twist}</span>
+            <Sentences text={tazza.twist} />
           </>
         ) : (
-          draw.fortune
+          <Sentences text={draw.fortune} />
         )}
       </span>
     </button>

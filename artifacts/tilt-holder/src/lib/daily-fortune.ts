@@ -75,6 +75,21 @@ export const FORTUNES = [
   '블라인드가 오를수록 강해지는 당신. 오늘은 후반 뒷심 주의!',
 ];
 
+// Splits a fortune into sentences so each can sit on its own line. A sentence ends
+// at . ! ? or … (plus a closing quote) followed by a space. Written without
+// lookbehind, which older iPhones can't parse.
+export function splitSentences(text: string) {
+  const sentences: string[] = [];
+  const boundary = /[.!?…]+["”’)]?\s+/g;
+  let start = 0;
+  for (let match = boundary.exec(text); match; match = boundary.exec(text)) {
+    sentences.push(text.slice(start, match.index + match[0].length).trim());
+    start = match.index + match[0].length;
+  }
+  sentences.push(text.slice(start).trim());
+  return sentences.filter(Boolean);
+}
+
 export function localDateKey(date = new Date()) {
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
