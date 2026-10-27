@@ -160,6 +160,13 @@ function HandRecorder({
   const suggested = nextToAct(hand, street);
   const currentActor = actor ?? suggested;
   const folded = new Set(hand.actions.filter((action) => STREETS.indexOf(action.street) <= STREETS.indexOf(street) && action.type === 'fold').map((action) => action.name));
+  // Anyone who folded on an earlier street drops to the bottom of this street's list;
+  // a fold on the current street stays in place (greyed) until the next street.
+  const foldedEarlier = new Set(hand.actions.filter((action) => STREETS.indexOf(action.street) < STREETS.indexOf(street) && action.type === 'fold').map((action) => action.name));
+  const streetPlayers = [
+    ...actingOrder(hand.seats, street).filter((name) => !foldedEarlier.has(name)),
+    ...actingOrder(hand.seats, street).filter((name) => foldedEarlier.has(name)),
+  ];
   const allIn = new Set(hand.actions.filter((action) => STREETS.indexOf(action.street) <= STREETS.indexOf(street) && action.type === 'allin').map((action) => action.name));
   const pot = potTotal(hand);
   const canSave = hand.actions.length > 0 || hand.board.length > 0 || hand.tag !== null || hand.memo.trim().length > 0;
@@ -352,7 +359,7 @@ function HandRecorder({
                 {picking?.kind === 'board' ? <div className="mt-3"><CardPicker used={usedCards} onPick={pickCard} onCancel={() => setPicking(null)} /></div> : null}
 
                 <div className="mt-4 space-y-1.5">
-                  {actingOrder(hand.seats, street).map((name) => {
+                  {streetPlayers.map((name) => {
                     const isOut = folded.has(name);
                     const isActor = name === currentActor;
                     return (
