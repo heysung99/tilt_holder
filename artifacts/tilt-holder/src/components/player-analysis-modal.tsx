@@ -27,6 +27,7 @@ import {
   overallRanking,
 } from '@/lib/player-stats';
 import { shareElementImage, withTemporaryStyles } from '@/lib/share-image';
+import TierBadge from '@/components/tier-badge';
 
 function StatTile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'positive' | 'negative' }) {
   const color = tone === 'positive' ? 'text-[#16a34a]' : tone === 'negative' ? 'text-[#dc2626]' : 'text-[#20253a]';
@@ -88,10 +89,7 @@ export default function PlayerAnalysisModal({
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-bold text-[#20253a]">{playerName}</h3>
             {rankInfo ? (
-              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${rankInfo.tier.className}`}>
-                <span>{rankInfo.tier.icon}</span>
-                <span>{rankInfo.tier.label}</span>
-              </span>
+              <TierBadge tier={rankInfo.tier} />
             ) : null}
           </div>
           <div data-share-date-slot="true" className="flex items-center justify-end gap-2">

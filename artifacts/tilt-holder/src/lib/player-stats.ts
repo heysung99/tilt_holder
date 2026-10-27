@@ -9,22 +9,29 @@ export type Player = {
   text: string;
 };
 
-export function rankingTier(rank: number, total: number) {
-  if (rank === 1) return { label: '챌린저', icon: '👑', className: 'bg-gradient-to-r from-[#ffe17d] to-[#ffd000] text-[#523d00] border border-[#e6b800] shadow-xs font-extrabold' };
-  if (rank === 2) return { label: '그랜드마스터', icon: '🔥', className: 'bg-gradient-to-r from-[#ff8d82] to-[#e63928] text-white border border-[#b82314] shadow-xs font-extrabold' };
-  if (rank === 3) return { label: '마스터', icon: '🔮', className: 'bg-gradient-to-r from-[#d8b4fe] to-[#9333ea] text-white border border-[#7e22ce] shadow-xs font-bold' };
+export type Tier = { label: string; icon: string; className: string };
+
+// Every tier shares one badge shape (see TierBadge); only these colors differ.
+const TIERS: Record<string, Tier> = {
+  챌린저: { label: '챌린저', icon: '👑', className: 'border-[#efc94c] bg-gradient-to-b from-[#fff8d6] to-[#ffe68a] text-[#7a5600]' },
+  그랜드마스터: { label: '그랜드마스터', icon: '🔥', className: 'border-[#f4a99f] bg-gradient-to-b from-[#fff0ee] to-[#ffd3cc] text-[#b42318]' },
+  마스터: { label: '마스터', icon: '🔮', className: 'border-[#d4b0fa] bg-gradient-to-b from-[#f8f0ff] to-[#ead8ff] text-[#7e22ce]' },
+  다이아: { label: '다이아', icon: '💎', className: 'border-[#a9d6f5] bg-gradient-to-b from-[#f0f9ff] to-[#d9effd] text-[#0369a1]' },
+  플래티넘: { label: '플래티넘', icon: '🛡️', className: 'border-[#9fe0d1] bg-gradient-to-b from-[#effcf8] to-[#d3f5ec] text-[#0f766e]' },
+  골드: { label: '골드', icon: '🥇', className: 'border-[#f0d77a] bg-gradient-to-b from-[#fffcea] to-[#fdf2b8] text-[#a16207]' },
+  실버: { label: '실버', icon: '🥈', className: 'border-[#d3dbe5] bg-gradient-to-b from-[#fafbfd] to-[#e9eef4] text-[#475569]' },
+  브론즈: { label: '브론즈', icon: '🥉', className: 'border-[#f2c59a] bg-gradient-to-b from-[#fff6ec] to-[#fde3c8] text-[#9a3412]' },
+  아이언: { label: '아이언', icon: '⚙️', className: 'border-[#d9d6d3] bg-gradient-to-b from-[#f8f8f7] to-[#e9e7e5] text-[#57534e]' },
+};
+
+export function rankingTier(rank: number, total: number): Tier {
+  if (rank === 1) return TIERS.챌린저;
+  if (rank === 2) return TIERS.그랜드마스터;
+  if (rank === 3) return TIERS.마스터;
   const otherRank = rank - 4;
   const otherCount = Math.max(total - 3, 1);
   const tierIndex = Math.min(5, Math.floor((otherRank * 6) / otherCount));
-  const tiers = [
-    { label: '다이아', icon: '💎', className: 'bg-[#e0f2fe] text-[#0369a1] border border-[#bae6fd]' },
-    { label: '플래티넘', icon: '🛡️', className: 'bg-[#ccfbf1] text-[#0f766e] border border-[#99f6e4]' },
-    { label: '골드', icon: '🥇', className: 'bg-[#fef9c3] text-[#a16207] border border-[#fef08a]' },
-    { label: '실버', icon: '🥈', className: 'bg-[#f1f5f9] text-[#475569] border border-[#e2e8f0]' },
-    { label: '브론즈', icon: '🥉', className: 'bg-[#ffedd5] text-[#9a3412] border border-[#fed7aa]' },
-    { label: '아이언', icon: '⚙️', className: 'bg-[#f3f4f6] text-[#6b7280] border border-[#e5e7eb]' },
-  ];
-  return tiers[tierIndex];
+  return [TIERS.다이아, TIERS.플래티넘, TIERS.골드, TIERS.실버, TIERS.브론즈, TIERS.아이언][tierIndex];
 }
 
 const TIER_ORDER = ['챌린저', '그랜드마스터', '마스터', '다이아', '플래티넘', '골드', '실버', '브론즈', '아이언'];
@@ -52,7 +59,7 @@ export function rankingAtDate(users: Player[], historicalRecords: HistoricalReco
     .sort((a, b) => b.net - a.net || b.winRate - a.winRate || b.played - a.played);
 
   const ranked = stats.filter((stat) => stat.played >= 5);
-  const rankMap = new Map<PlayerName, { rank: number; tier: ReturnType<typeof rankingTier> }>();
+  const rankMap = new Map<PlayerName, { rank: number; tier: Tier }>();
   ranked.forEach((stat, index) => {
     rankMap.set(stat.name, { rank: index + 1, tier: rankingTier(index + 1, ranked.length) });
   });
@@ -70,7 +77,7 @@ export function overallRanking(users: Player[], historicalRecords: HistoricalRec
     .sort((a, b) => b.net - a.net);
 
   const ranked = stats.filter((stat) => stat.played >= 5);
-  const rankMap = new Map<PlayerName, { rank: number; tier: ReturnType<typeof rankingTier> }>();
+  const rankMap = new Map<PlayerName, { rank: number; tier: Tier }>();
   ranked.forEach((stat, index) => {
     rankMap.set(stat.name, { rank: index + 1, tier: rankingTier(index + 1, ranked.length) });
   });
