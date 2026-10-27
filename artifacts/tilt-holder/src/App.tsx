@@ -18,6 +18,7 @@ import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 
 import {
+  ArrowRight,
   ArrowUpRight,
   Banknote,
   Bell,
@@ -1369,6 +1370,16 @@ function TierTableModal({ totalRanked, onClose }: { totalRanked: number; onClose
   );
 }
 
+function TierBadge({ tier }: { tier: ReturnType<typeof rankingTier> | null }) {
+  if (!tier) return <span className="shrink-0 rounded-full bg-[#f1f1ee] px-2 py-0.5 text-[10px] font-bold text-[#697087]">언랭</span>;
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${tier.className}`}>
+      <span>{tier.icon}</span>
+      <span>{tier.label}</span>
+    </span>
+  );
+}
+
 function RankingScreen({
   users,
   historyDates,
@@ -1731,36 +1742,41 @@ function RankingScreen({
           </div>
           <div className="divide-y divide-[#ececf0]">
             {dateResults.map(({ player, value }) => {
-              const after = tiersAfterDate.get(player.name);
-              const before = tiersBeforeDate.get(player.name);
-              const tierShift = after && before ? tierLevel(after.tier.label) - tierLevel(before.tier.label) : 0;
+              const after = tiersAfterDate.get(player.name)?.tier ?? null;
+              const before = tiersBeforeDate.get(player.name)?.tier ?? null;
+              // Entering the ranking counts as moving up from 언랭.
+              const tierShift = after?.label === before?.label ? 0
+                : !before ? 1
+                : !after ? -1
+                : tierLevel(after.label) - tierLevel(before.label);
               const buyInCount = shownDetail?.buyIns?.[player.name];
               return (
                 <div key={player.name} className="flex items-center gap-3 px-4 py-3" data-testid={`row-date-result-${player.name}`}>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-bold text-[#20253a]">{player.name}</span>
-                      {after ? (
-                        <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ${after.tier.className}`}>
-                          <span>{after.tier.icon}</span>
-                          <span>{after.tier.label}</span>
-                        </span>
+                    <p className="truncate text-sm font-bold text-[#20253a]">{player.name}</p>
+                    <div className="mt-1 flex items-center gap-1" data-testid={`tier-change-${player.name}`}>
+                      {tierShift === 0 ? (
+                        <>
+                          <TierBadge tier={after} />
+                          <span className="ml-0.5 text-[10px] font-bold text-[#a0a4b1]">= 유지</span>
+                        </>
                       ) : (
-                        <span className="shrink-0 rounded-full bg-[#f1f1ee] px-2 py-0.5 text-[10px] font-bold text-[#697087]">언랭</span>
+                        <>
+                          <TierBadge tier={before} />
+                          <ArrowRight size={13} strokeWidth={2.5} className={`shrink-0 ${tierShift > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'}`} aria-label={tierShift > 0 ? '티어 상승' : '티어 하락'} />
+                          <TierBadge tier={after} />
+                        </>
                       )}
-                      <span data-testid={`tier-change-${player.name}`}>
-                        {after && !before ? <span className="mono text-[9px] font-extrabold text-[#2563eb]">NEW</span> : null}
-                        {tierShift > 0 ? <span className="mono text-[11px] font-extrabold text-[#16a34a]" aria-label="티어 상승">▲</span> : null}
-                        {tierShift < 0 ? <span className="mono text-[11px] font-extrabold text-[#dc2626]" aria-label="티어 하락">▼</span> : null}
-                      </span>
                     </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className={`mono text-[15px] font-bold tracking-[-0.03em] ${value > 0 ? 'text-[#3f7a1f]' : value < 0 ? 'text-[#c0392b]' : 'text-[#858a9b]'}`} data-testid={`text-date-amount-${player.name}`}>
+                      {formatManwon(value)}
+                    </p>
                     {buyInCount !== undefined ? (
-                      <p className="mt-0.5 text-xs text-[#858a9b]" data-testid={`text-date-buyins-${player.name}`}>바이인 {buyInCount}회</p>
+                      <p className="mt-0.5 text-[11px] text-[#858a9b]" data-testid={`text-date-buyins-${player.name}`}>바이인 {buyInCount}회</p>
                     ) : null}
                   </div>
-                  <span className={`mono shrink-0 text-[15px] font-bold tracking-[-0.03em] ${value > 0 ? 'text-[#3f7a1f]' : value < 0 ? 'text-[#c0392b]' : 'text-[#858a9b]'}`} data-testid={`text-date-amount-${player.name}`}>
-                    {formatManwon(value)}
-                  </span>
                 </div>
               );
             })}
