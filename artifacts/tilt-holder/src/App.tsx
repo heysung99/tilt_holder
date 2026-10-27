@@ -18,6 +18,7 @@ import { ApiError, api, setAdminPassword } from '@/lib/api';
 import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 import TierBadge from '@/components/tier-badge';
+import DailyFortune from '@/components/daily-fortune';
 
 import {
   ArrowRight,
@@ -943,6 +944,7 @@ function GameScreen({
 
   return (
     <div>
+      <DailyFortune />
       <button
         type="button"
         className="tilt-button rise-in mb-6 flex w-full items-center justify-between rounded-[18px] bg-[#2d3d8f] px-5 py-4 text-left text-white shadow-[0_12px_28px_rgba(45,61,143,.18)] hover:bg-[#202e74]"
