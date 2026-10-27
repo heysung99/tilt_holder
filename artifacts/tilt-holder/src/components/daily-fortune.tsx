@@ -4,6 +4,7 @@ import {
   type DailyDraw,
   SUIT_SYMBOL,
   describeHand,
+  findTazzaLine,
   getTodayDraw,
   isRedSuit,
   localDateKey,
@@ -54,6 +55,7 @@ function formatDrawDate(date: string) {
 
 function FortuneModal({ draw, onClose }: { draw: DailyDraw; onClose: () => void }) {
   const hand = describeHand(draw.cards);
+  const tazza = findTazzaLine(draw.fortune);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" onClick={onClose} data-testid="modal-daily-fortune">
       <div className="rise-in w-full max-w-[380px] overflow-hidden rounded-[24px] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
@@ -75,9 +77,20 @@ function FortuneModal({ draw, onClose }: { draw: DailyDraw; onClose: () => void 
             <p className="text-lg font-extrabold tracking-[-0.03em] text-[#20253a]">{hand.name}</p>
             <p className="mt-1 break-keep text-[13px] font-medium text-[#697087]">{hand.comment}</p>
           </div>
-          <div className="mt-4 rounded-2xl bg-[#f6f6f1] px-4 py-4">
-            <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#9a8f4a]">fortune</p>
-            <p className="mt-1.5 break-keep text-[15px] font-semibold leading-relaxed text-[#20253a]" data-testid="text-daily-fortune">“{draw.fortune}”</p>
+          <div className="mt-4 rounded-2xl bg-[#f6f6f1] px-4 py-4" data-testid="text-daily-fortune">
+            {tazza ? (
+              <>
+                <p className="text-[11px] font-bold text-[#9a8f4a]">🎬 타짜 명대사</p>
+                <p className="mt-2 break-keep text-lg font-extrabold leading-snug tracking-[-0.03em] text-[#20253a]">“{tazza.quote}”</p>
+                <p className="mt-1 text-xs font-semibold text-[#858a9b]">— {tazza.by}</p>
+                <p className="mt-3 break-keep text-sm font-medium leading-relaxed text-[#4a5068]">{tazza.twist}</p>
+              </>
+            ) : (
+              <>
+                <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#9a8f4a]">fortune</p>
+                <p className="mt-1.5 break-keep text-[15px] font-semibold leading-relaxed text-[#20253a]">“{draw.fortune}”</p>
+              </>
+            )}
           </div>
           <p className="mt-4 text-center text-[11px] text-[#9aa0ae]">하루에 한 번만 뽑혀요. 내일 새로운 운세를 확인하세요!</p>
         </div>

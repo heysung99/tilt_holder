@@ -13,8 +13,30 @@ export const SUIT_SYMBOL: Record<Suit, string> = { s: '♠', h: '♥', d: '♦',
 export const isRedSuit = (suit: Suit) => suit === 'h' || suit === 'd';
 export const rankLabel = (rank: string) => (rank === 'T' ? '10' : rank);
 
-// Loosely after well-known poker sayings, rewritten for the table.
+export type TazzaLine = { quote: string; by: string; twist: string };
+
+// Lines from the film 타짜, each with a hold'em spin. Profanity in the originals is left out.
+export const TAZZA_LINES: TazzaLine[] = [
+  { quote: '묻고 더블로 가!', by: '곽철용', twist: '오늘은 3벳 각입니다. 단, 진짜 패가 들어왔을 때만.' },
+  { quote: '싸늘하다. 가슴에 비수가 날아와 꽂힌다.', by: '고니', twist: '리버에서 이 느낌이 오면 미련 없이 폴드하세요.' },
+  { quote: '확실하지 않으면 승부를 걸지 마라.', by: '평경장', twist: '오늘은 넛츠가 아니면 한 템포 쉬어가세요.' },
+  { quote: '동작 그만, 밑장 빼기냐?', by: '고니', twist: '오늘은 상대의 작은 버릇까지 눈에 들어오는 날.' },
+  { quote: '쫄리면 뒈지시든가.', by: '아귀', twist: '상대 올인에 쫄지 마세요. 오늘은 당신 패가 더 셉니다.' },
+  { quote: '손은 눈보다 빠르다.', by: '고니', twist: '오늘은 머리가 손보다 빠르게! 팟 오즈부터 계산하세요.' },
+  { quote: '아수라발발타!', by: '평경장', twist: '주문을 외우면 오늘 플랍이 당신 편으로 깔립니다.' },
+  { quote: '나 이대 나온 여자야.', by: '정마담', twist: '오늘은 자신감이 실력. 당당하게 레이즈하세요.' },
+  { quote: '나도 순정이 있다!', by: '곽철용', twist: '오늘은 처음 고른 핸드를 끝까지 믿어보는 날.' },
+  { quote: '마포대교는 무너졌냐?', by: '곽철용', twist: '오늘 당신의 다리는 튼튼합니다. 리버까지 무사히 건너세요.' },
+];
+
+const tazzaText = (line: TazzaLine) => `‘${line.quote}’ (${line.by}) ${line.twist}`;
+
+// The 타짜 line behind a saved fortune, so it can be shown quote-first.
+export const findTazzaLine = (fortune: string) => TAZZA_LINES.find((line) => tazzaText(line) === fortune) ?? null;
+
+// Loosely after well-known poker sayings, rewritten for the table, plus the 타짜 lines.
 export const FORTUNES = [
+  ...TAZZA_LINES.map(tazzaText),
   '칩 하나와 의자 하나만 있으면 된다. 오늘은 숏스택에서도 기적이 일어나는 날!',
   '포커는 배우는 데 5분, 마스터하는 데 평생. 오늘은 그 5분짜리 실력으로도 충분합니다.',
   '30분 안에 테이블의 호구가 안 보인다면… 거울은 잠시 넣어두세요. 오늘은 아닐 거예요.',
