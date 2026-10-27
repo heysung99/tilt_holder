@@ -3,8 +3,10 @@ import {
   MATCHUP_MIN_GAMES,
   type Player,
   type PlayerName,
+  type Matchup,
   computeMatchup,
   formatManwon,
+  headToHeadRate,
   matchupVerdict,
 } from '@/lib/player-stats';
 
@@ -18,7 +20,25 @@ function formatGameDate(date: string | undefined, index: number) {
 
 const amountColor = (value: number) => (value > 0 ? 'text-[#16a34a]' : value < 0 ? 'text-[#dc2626]' : 'text-[#858a9b]');
 
-// Everyone who has sat at a table with the player, most shared games first.
+function BestWorstCard({ kind, name, matchup, onPick }: { kind: 'best' | 'worst'; name: PlayerName; matchup: Matchup; onPick: (name: PlayerName) => void }) {
+  const best = kind === 'best';
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(name)}
+      className={`rounded-2xl border p-3 text-left ${best ? 'border-[#bfe3c9] bg-[#effaf2]' : 'border-[#f3c4bf] bg-[#fff2f0]'}`}
+      data-testid={`matchup-${kind}`}
+    >
+      <p className={`text-[11px] font-bold ${best ? 'text-[#16803c]' : 'text-[#c0392b]'}`}>{best ? '😊 최고의 상성' : '😈 최악의 상성'}</p>
+      <p className="mt-1 text-base font-extrabold text-[#20253a]">{name}</p>
+      <p className="mono mt-0.5 text-[11px] font-bold text-[#596078]">{matchup.aAhead}승 {matchup.bAhead}패</p>
+      <p className={`mono text-sm font-bold ${amountColor(matchup.aSum)}`}>{formatManwon(matchup.aSum)}</p>
+    </button>
+  );
+}
+
+// Everyone who has sat at a table with the player, most shared games first, with
+// the best and worst matchups (by head-to-head, then money) pulled out on top.
 export function MatchupPicker({
   playerName,
   users,
@@ -39,21 +59,41 @@ export function MatchupPicker({
   if (opponents.length === 0) {
     return <p className="mt-6 text-sm text-[#858a9b]">아직 함께 플레이한 사람이 없어요.</p>;
   }
+
+  const ranked = opponents
+    .filter((item) => item.matchup.together >= MATCHUP_MIN_GAMES)
+    .sort((a, b) => headToHeadRate(b.matchup) - headToHeadRate(a.matchup) || b.matchup.aSum - a.matchup.aSum);
+  const best = ranked[0];
+  const worst = ranked.length > 1 ? ranked[ranked.length - 1] : undefined;
+
   return (
     <div className="mt-4" data-testid="matchup-picker">
-      <p className="text-xs text-[#858a9b]">상대를 고르면 둘이 함께한 게임만으로 상성을 보여줘요.</p>
-      <div className="mt-3 divide-y divide-[#ececf0] rounded-2xl border border-[#ececf0]">
+      {best ? (
+        <div className={`grid gap-2 ${worst ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <BestWorstCard kind="best" name={best.name} matchup={best.matchup} onPick={onPick} />
+          {worst ? <BestWorstCard kind="worst" name={worst.name} matchup={worst.matchup} onPick={onPick} /> : null}
+        </div>
+      ) : (
+        <p className="rounded-xl bg-[#fafaf6] px-3 py-2 text-[11px] text-[#858a9b]">{MATCHUP_MIN_GAMES}판 이상 함께한 상대가 생기면 최고·최악의 상성을 보여줘요.</p>
+      )}
+      <p className="mt-4 text-xs text-[#858a9b]">상대를 고르면 둘이 함께한 게임만으로 상성을 보여줘요. 금액은 함께한 판에서 {playerName} 합계예요.</p>
+      <div className="mt-2 divide-y divide-[#ececf0] rounded-2xl border border-[#ececf0]">
         {opponents.map(({ name, matchup }) => (
           <button
             key={name}
             type="button"
             onClick={() => onPick(name)}
-            className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-[#f8f9ff]"
+            className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-[#f8f9ff]"
             data-testid={`matchup-opponent-${name}`}
           >
-            <span className="flex-1 text-sm font-bold text-[#20253a]">{name}</span>
-            <span className="text-xs text-[#858a9b]">{matchup.together}판 함께</span>
-            <span className="mono w-[74px] text-right text-xs font-bold text-[#2d3d8f]">{matchup.aAhead}승 {matchup.bAhead}패</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold text-[#20253a]">{name}</span>
+              <span className="block text-[11px] text-[#858a9b]">{matchup.together}판 함께</span>
+            </span>
+            <span className="text-right">
+              <span className="mono block text-xs font-bold text-[#2d3d8f]">{matchup.aAhead}승 {matchup.bAhead}패</span>
+              <span className={`mono block text-xs font-bold ${amountColor(matchup.aSum)}`}>{formatManwon(matchup.aSum)}</span>
+            </span>
           </button>
         ))}
       </div>
@@ -105,15 +145,16 @@ export function MatchupView({
 
           <div className="mt-4 grid grid-cols-2 gap-2">
             {[
-              { name: playerName, withAvg: matchup.aAvgWith, overall: matchup.aAvgOverall, other: opponent },
-              { name: opponent, withAvg: matchup.bAvgWith, overall: matchup.bAvgOverall, other: playerName },
+              { name: playerName, sum: matchup.aSum, withAvg: matchup.aAvgWith, overall: matchup.aAvgOverall, other: opponent },
+              { name: opponent, sum: matchup.bSum, withAvg: matchup.bAvgWith, overall: matchup.bAvgOverall, other: playerName },
             ].map((side) => {
               const diff = side.withAvg - side.overall;
               return (
                 <div key={side.name} className="rounded-xl bg-[#fafaf6] p-3">
                   <p className="text-[11px] font-bold text-[#596078]">{side.name}</p>
-                  <p className={`mono mt-1 text-base font-bold ${amountColor(side.withAvg)}`}>{formatManwon(side.withAvg)}</p>
-                  <p className="text-[10px] text-[#858a9b]">함께할 때 평균</p>
+                  <p className={`mono mt-1 text-base font-bold ${amountColor(side.sum)}`} data-testid={`matchup-sum-${side.name}`}>{formatManwon(side.sum)}</p>
+                  <p className="text-[10px] text-[#858a9b]">함께한 {matchup.together}판 합계</p>
+                  <p className={`mono mt-1.5 text-xs font-bold ${amountColor(side.withAvg)}`}>{formatManwon(side.withAvg)} <span className="font-sans text-[10px] font-normal text-[#858a9b]">평균</span></p>
                   <p className="mt-1.5 break-keep text-[10px] leading-snug text-[#697087]">
                     평소 {formatManwon(side.overall)} → {side.other} 있으면{' '}
                     <span className={`font-bold ${amountColor(diff)}`}>{diff >= 0 ? '+' : ''}{(Math.round(diff * 10) / 10).toFixed(1)}만</span>

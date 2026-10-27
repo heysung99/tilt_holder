@@ -155,6 +155,9 @@ export type Matchup = {
   aAhead: number;
   bAhead: number;
   ties: number;
+  // Each player's total over the shared games.
+  aSum: number;
+  bSum: number;
   aAvgWith: number;
   bAvgWith: number;
   aAvgOverall: number;
@@ -178,12 +181,15 @@ export function computeMatchup(a: PlayerName, b: PlayerName, historicalRecords: 
     const bResult = playedAt(bValues, index);
     if (aResult !== null && bResult !== null) games.push({ index, a: aResult, b: bResult });
   }
+  const total = (values: number[]) => Math.round(values.reduce((sum, value) => sum + value, 0) * 10) / 10;
   const average = (values: number[]) => (values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0);
   return {
     together: games.length,
     aAhead: games.filter((game) => game.a > game.b).length,
     bAhead: games.filter((game) => game.b > game.a).length,
     ties: games.filter((game) => game.a === game.b).length,
+    aSum: total(games.map((game) => game.a)),
+    bSum: total(games.map((game) => game.b)),
     aAvgWith: average(games.map((game) => game.a)),
     bAvgWith: average(games.map((game) => game.b)),
     aAvgOverall: computePlayerStats(a, historicalRecords).avg,
@@ -199,6 +205,12 @@ export function subjectParticle(name: string) {
 }
 
 export const MATCHUP_MIN_GAMES = 3;
+
+// Share of the decided shared games the first player finished ahead in.
+export const headToHeadRate = (matchup: Matchup) => {
+  const decided = matchup.aAhead + matchup.bAhead;
+  return decided ? matchup.aAhead / decided : 0.5;
+};
 
 export function matchupVerdict(a: PlayerName, b: PlayerName, matchup: Matchup) {
   if (matchup.together < MATCHUP_MIN_GAMES) {
