@@ -212,15 +212,47 @@ function FortuneModal({ draw, reveal, onClose }: { draw: DailyDraw; reveal: bool
   );
 }
 
+// Shown when the app opens before today's fortune has been drawn.
+function FortunePrompt({ onReveal, onLater }: { onReveal: () => void; onLater: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-xs" onClick={onLater} data-testid="modal-fortune-prompt">
+      <div className="rise-in w-full max-w-[340px] overflow-hidden rounded-[24px] bg-white text-center shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="bg-[radial-gradient(circle_at_50%_0%,#3a4ba3,#202e74)] px-6 pb-6 pt-7">
+          <div className="-my-2 flex scale-[0.82] justify-center">
+            <span className="luck-float relative -mr-2 -rotate-[8deg]"><PlayingCard card={null} size="large" /></span>
+            <span className="luck-float relative translate-y-1 rotate-[8deg]" style={{ animationDelay: '200ms' }}><PlayingCard card={null} size="large" /></span>
+          </div>
+        </div>
+        <div className="px-6 pb-6 pt-5">
+          <p className="mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#9a8f4a]">today's luck</p>
+          <h3 className="mt-1 text-lg font-extrabold tracking-[-0.03em] text-[#20253a]">오늘의 운세를 아직 안 봤어요!</h3>
+          <p className="mt-1.5 break-keep text-[13px] leading-relaxed text-[#697087]">플레이어마다 운세가 다릅니다.<br />오늘의 핸드 두 장과 운세를 뒤집어보세요.</p>
+          <button type="button" onClick={onReveal} className="tilt-button mt-5 w-full rounded-xl bg-[#2d3d8f] py-3 text-sm font-bold text-white hover:bg-[#202e74]" data-testid="button-prompt-reveal">오늘의 운세 보기</button>
+          <button type="button" onClick={onLater} className="mt-2 w-full py-2 text-xs font-bold text-[#858a9b]" data-testid="button-prompt-later">나중에</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Sits above 게임 개설: a "?" button until today's draw, then a card that keeps the
 // day's hand and fortune in its place. The modal renders beside it rather than
 // inside, because the entrance animation would trap a fixed overlay.
-export default function DailyFortune() {
+export default function DailyFortune({ autoPrompt = false, onAutoPromptHandled }: { autoPrompt?: boolean; onAutoPromptHandled?: () => void }) {
   const [draw, setDraw] = useState<DailyDraw | null>(peekTodayDraw);
   const [modal, setModal] = useState<{ reveal: boolean } | null>(null);
+  const [isPromptOpen, setIsPromptOpen] = useState(false);
   const todayDraw = draw?.date === localDateKey() ? draw : null;
 
+  // The app asks once per open (autoPrompt); only someone without today's draw sees it.
+  useEffect(() => {
+    if (!autoPrompt) return;
+    onAutoPromptHandled?.();
+    if (!peekTodayDraw()) setIsPromptOpen(true);
+  }, [autoPrompt]);
+
   const reveal = () => {
+    setIsPromptOpen(false);
     setDraw(getTodayDraw());
     setModal({ reveal: true });
   };
@@ -247,6 +279,7 @@ export default function DailyFortune() {
           </span>
         </button>
       )}
+      {isPromptOpen ? <FortunePrompt onReveal={reveal} onLater={() => setIsPromptOpen(false)} /> : null}
       {modal && draw ? <FortuneModal draw={draw} reveal={modal.reveal} onClose={() => setModal(null)} /> : null}
     </>
   );

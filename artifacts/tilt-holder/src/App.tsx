@@ -256,6 +256,7 @@ function AppShell() {
   const pushActionable = push.state === 'off' || push.state === 'ios-needs-install';
   const [showGuide, setShowGuide] = useState(false);
   const guideCheckedRef = useRef(false);
+  const [guideResolved, setGuideResolved] = useState(false);
   const guideTargets = showGuide
     ? [
         ...(isInstalled ? [] : [{ testId: 'button-install-shortcut', label: '앱 저장' }]),
@@ -269,12 +270,18 @@ function AppShell() {
     // (until then <main> traps the buttons below the overlay).
     if (guideCheckedRef.current || push.state === 'loading' || !hasEntered) return;
     guideCheckedRef.current = true;
+    setGuideResolved(true);
     if (!isInstalled || pushActionable) setShowGuide(true);
   }, [push.state, hasEntered, isInstalled, pushActionable]);
 
   useEffect(() => {
     if (showGuide && guideTargets.length === 0) setShowGuide(false);
   }, [showGuide, guideTargets.length]);
+
+  // Once per app open, after the setup guide (if any) is out of the way, the game tab
+  // invites anyone who hasn't drawn today's fortune yet.
+  const [fortunePromptPending, setFortunePromptPending] = useState(true);
+  const autoPromptFortune = fortunePromptPending && guideResolved && !showGuide && activeTab === 'game';
 
   const isGuided = (testId: string) => guideTargets.some((target) => target.testId === testId);
   const guidedClass = 'relative z-[60] ring-4 ring-white/90';
@@ -873,6 +880,8 @@ function AppShell() {
             onStartEditBuyIns={startEditingBuyIns}
             onFinishEditBuyIns={finishEditingBuyIns}
             onVerifyPassword={verifyPassword}
+            autoPromptFortune={autoPromptFortune}
+            onFortunePromptHandled={() => setFortunePromptPending(false)}
           />
         )}
         {activeTab === 'settle' && (
@@ -967,6 +976,8 @@ function GameScreen({
   onStartEditBuyIns,
   onFinishEditBuyIns,
   onVerifyPassword,
+  autoPromptFortune,
+  onFortunePromptHandled,
 }: {
   session: SessionState;
   users: Player[];
@@ -986,6 +997,8 @@ function GameScreen({
   onStartEditBuyIns: () => void;
   onFinishEditBuyIns: () => void;
   onVerifyPassword: (title: string, onSuccess: () => void) => void;
+  autoPromptFortune: boolean;
+  onFortunePromptHandled: () => void;
 }) {
   const [showNewGame, setShowNewGame] = useState(false);
   const [showAddParticipant, setShowAddParticipant] = useState(false);
@@ -1016,7 +1029,7 @@ function GameScreen({
 
   return (
     <div>
-      <DailyFortune />
+      <DailyFortune autoPrompt={autoPromptFortune} onAutoPromptHandled={onFortunePromptHandled} />
       <button
         type="button"
         className="tilt-button rise-in mb-6 flex w-full items-center justify-between rounded-[18px] bg-[#2d3d8f] px-5 py-4 text-left text-white shadow-[0_12px_28px_rgba(45,61,143,.18)] hover:bg-[#202e74]"
