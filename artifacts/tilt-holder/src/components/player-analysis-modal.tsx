@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Share2 } from 'lucide-react';
+import { ChevronLeft, Share2, Swords } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -28,6 +28,7 @@ import {
 } from '@/lib/player-stats';
 import { shareElementImage, withTemporaryStyles } from '@/lib/share-image';
 import TierBadge from '@/components/tier-badge';
+import { MatchupPicker, MatchupView } from '@/components/matchup';
 
 function StatTile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'positive' | 'negative' }) {
   const color = tone === 'positive' ? 'text-[#16a34a]' : tone === 'negative' ? 'text-[#dc2626]' : 'text-[#20253a]';
@@ -44,15 +45,19 @@ export default function PlayerAnalysisModal({
   playerName,
   users,
   historicalRecords,
+  historyDates,
   onClose,
 }: {
   playerName: PlayerName;
   users: Player[];
   historicalRecords: HistoricalRecord[];
+  historyDates?: string[];
   onClose: () => void;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
+  // 'stats' is the player's own record; the matchup views compare them with one opponent.
+  const [view, setView] = useState<'stats' | 'pick' | { opponent: PlayerName }>('stats');
 
   const handleShare = async () => {
     const card = cardRef.current;
@@ -63,7 +68,8 @@ export default function PlayerAnalysisModal({
     const { scrollTop } = card;
     const restore = withTemporaryStyles(card, { maxHeight: 'none', overflow: 'visible' });
     try {
-      await shareElementImage(card, `player-${playerName}.png`);
+      const fileName = typeof view === 'object' ? `matchup-${playerName}-${view.opponent}.png` : `player-${playerName}.png`;
+      await shareElementImage(card, fileName);
     } finally {
       restore();
       card.scrollTop = scrollTop;
@@ -86,12 +92,21 @@ export default function PlayerAnalysisModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
       <div ref={cardRef} className="rise-in max-h-[88vh] w-full max-w-[420px] overflow-y-auto rounded-[24px] bg-white p-6 shadow-2xl">
         <div className="flex items-center justify-between border-b border-[#ececf0] pb-4">
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-bold text-[#20253a]">{playerName}</h3>
-            {rankInfo ? (
-              <TierBadge tier={rankInfo.tier} />
-            ) : null}
-          </div>
+          {view === 'stats' ? (
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-bold text-[#20253a]">{playerName}</h3>
+              {rankInfo ? (
+                <TierBadge tier={rankInfo.tier} />
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button type="button" data-share-exclude="true" onClick={() => setView(view === 'pick' ? 'stats' : 'pick')} className="-ml-1.5 rounded-full p-1 text-[#697087] hover:bg-[#f1f1ee]" aria-label="뒤로" data-testid="button-matchup-back">
+                <ChevronLeft size={18} />
+              </button>
+              <h3 className="text-lg font-bold text-[#20253a]">{view === 'pick' ? '상성 확인' : <>{playerName} <span className="text-sm text-[#a0a4b1]">vs</span> {view.opponent}</>}</h3>
+            </div>
+          )}
           <div data-share-date-slot="true" className="flex items-center justify-end gap-2">
             <button
               type="button"
@@ -108,7 +123,11 @@ export default function PlayerAnalysisModal({
           </div>
         </div>
 
-        {stats.played === 0 ? (
+        {view === 'pick' ? (
+          <MatchupPicker playerName={playerName} users={users} historicalRecords={historicalRecords} onPick={(opponent) => setView({ opponent })} />
+        ) : typeof view === 'object' ? (
+          <MatchupView playerName={playerName} opponent={view.opponent} historicalRecords={historicalRecords} historyDates={historyDates} />
+        ) : stats.played === 0 ? (
           <p className="mt-6 text-sm text-[#858a9b]">아직 참여한 게임이 없습니다.</p>
         ) : (
           <>
@@ -120,6 +139,16 @@ export default function PlayerAnalysisModal({
               <StatTile label="최고 기록" value={formatManwon(stats.best)} tone="positive" />
               <StatTile label="최저 기록" value={formatManwon(stats.worst)} tone="negative" />
             </div>
+
+            <button
+              type="button"
+              data-share-exclude="true"
+              onClick={() => setView('pick')}
+              className="tilt-button mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-[#d9dcf1] bg-[#f3f4ff] py-2.5 text-xs font-bold text-[#2d3d8f] hover:bg-[#eceefe]"
+              data-testid="button-open-matchup"
+            >
+              <Swords size={14} /> 상성 확인하기
+            </button>
 
             {radarData ? (
               <div className="mt-6">

@@ -148,3 +148,72 @@ export function computeRadarData(name: PlayerName, users: Player[], historicalRe
 export function formatManwon(value: number) {
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}만원`;
 }
+
+export type Matchup = {
+  together: number;
+  // Who finished higher in each game both played.
+  aAhead: number;
+  bAhead: number;
+  ties: number;
+  aAvgWith: number;
+  bAvgWith: number;
+  aAvgOverall: number;
+  bAvgOverall: number;
+  // Shared games in play order, by index into the history dates.
+  games: { index: number; a: number; b: number }[];
+};
+
+const playedAt = (values: (number | null)[] | undefined, index: number) => {
+  const value = values?.[index];
+  return value === null || value === undefined ? null : value;
+};
+
+export function computeMatchup(a: PlayerName, b: PlayerName, historicalRecords: HistoricalRecord[]): Matchup {
+  const aValues = historicalRecords.find((record) => record.name === a)?.values;
+  const bValues = historicalRecords.find((record) => record.name === b)?.values;
+  const length = Math.max(aValues?.length ?? 0, bValues?.length ?? 0);
+  const games: Matchup['games'] = [];
+  for (let index = 0; index < length; index += 1) {
+    const aResult = playedAt(aValues, index);
+    const bResult = playedAt(bValues, index);
+    if (aResult !== null && bResult !== null) games.push({ index, a: aResult, b: bResult });
+  }
+  const average = (values: number[]) => (values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0);
+  return {
+    together: games.length,
+    aAhead: games.filter((game) => game.a > game.b).length,
+    bAhead: games.filter((game) => game.b > game.a).length,
+    ties: games.filter((game) => game.a === game.b).length,
+    aAvgWith: average(games.map((game) => game.a)),
+    bAvgWith: average(games.map((game) => game.b)),
+    aAvgOverall: computePlayerStats(a, historicalRecords).avg,
+    bAvgOverall: computePlayerStats(b, historicalRecords).avg,
+    games,
+  };
+}
+
+// 이/가 after a Korean name, by whether its last syllable has a final consonant.
+export function subjectParticle(name: string) {
+  const code = name.charCodeAt(name.length - 1) - 0xac00;
+  return code >= 0 && code <= 11171 && code % 28 !== 0 ? '이' : '가';
+}
+
+export const MATCHUP_MIN_GAMES = 3;
+
+export function matchupVerdict(a: PlayerName, b: PlayerName, matchup: Matchup) {
+  if (matchup.together < MATCHUP_MIN_GAMES) {
+    return { emoji: '🤔', title: '아직 데이터 부족', detail: `함께한 게임이 ${MATCHUP_MIN_GAMES}판은 넘어야 상성을 볼 수 있어요.` };
+  }
+  const decided = matchup.aAhead + matchup.bAhead;
+  const rate = decided ? matchup.aAhead / decided : 0.5;
+  const [leader, trailer] = rate >= 0.5 ? [a, b] : [b, a];
+  let verdict: { emoji: string; title: string };
+  if (rate >= 0.65 || rate <= 0.35) verdict = { emoji: '😈', title: `${leader}${subjectParticle(leader)} ${trailer}의 천적` };
+  else if (rate >= 0.55 || rate <= 0.45) verdict = { emoji: '💪', title: `${leader} 우세` };
+  else verdict = { emoji: '⚔️', title: '팽팽한 라이벌' };
+
+  let detail = `${matchup.together}판 중 ${a} ${matchup.aAhead}번, ${b} ${matchup.bAhead}번 더 많이 땄어요.`;
+  if (matchup.aAvgWith > 0 && matchup.bAvgWith > 0) detail += ' 같이 치면 둘 다 따는 사이 💰';
+  else if (matchup.aAvgWith < 0 && matchup.bAvgWith < 0) detail += ' 같이 치면 둘 다 털리는 사이 💸';
+  return { ...verdict, detail };
+}

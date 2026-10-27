@@ -858,6 +858,7 @@ function AppShell() {
             session={session}
             users={users}
             historicalRecords={historicalRecords}
+            historyDates={historyDates}
             onCreateSession={requestCreateSession}
             onBuyInChange={updateBuyIn}
             onAddUser={addUser}
@@ -951,6 +952,7 @@ function GameScreen({
   session,
   users,
   historicalRecords,
+  historyDates,
   onCreateSession,
   onBuyInChange,
   onAddUser,
@@ -969,6 +971,7 @@ function GameScreen({
   session: SessionState;
   users: Player[];
   historicalRecords: HistoricalRecord[];
+  historyDates: string[];
   onCreateSession: (draft: { date: string; participantNames: PlayerName[] }) => void;
   onBuyInChange: (name: PlayerName, delta: number) => void;
   onAddUser: (name: string) => boolean;
@@ -1181,6 +1184,7 @@ function GameScreen({
             playerName={selectedPlayerName}
             users={users}
             historicalRecords={historicalRecords}
+            historyDates={historyDates}
             onClose={() => setSelectedPlayerName(null)}
           />
         ) : null}
@@ -1704,6 +1708,7 @@ function RankingScreen({
             playerName={selectedPlayerName}
             users={users}
             historicalRecords={historicalRecords}
+            historyDates={historyDates}
             onClose={() => setSelectedPlayerName(null)}
           />
         ) : null}
