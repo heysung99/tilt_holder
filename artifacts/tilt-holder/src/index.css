@@ -107,6 +107,46 @@
   to { opacity: 1; transform: none; }
 }
 
+/* Today's luck: cards flip from a "?" back to their face, with a soft light burst. */
+.luck-flip { perspective: 900px; }
+.luck-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 720ms cubic-bezier(.2,.8,.2,1);
+}
+.luck-flip-inner.is-flipped { transform: rotateY(180deg); }
+.luck-face {
+  position: absolute;
+  inset: 0;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.luck-face-front { transform: rotateY(180deg); }
+.luck-float { animation: luck-float 1.6s ease-in-out infinite; }
+.luck-burst { animation: luck-burst 1100ms ease-out both; }
+.luck-sparkle { animation: luck-sparkle 1200ms ease-out both; }
+.luck-fade-up { animation: rise-in 520ms cubic-bezier(.22,.8,.25,1) both; }
+@keyframes luck-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes luck-burst {
+  0% { opacity: 0; transform: scale(.3); }
+  35% { opacity: .9; }
+  100% { opacity: 0; transform: scale(1.9); }
+}
+@keyframes luck-sparkle {
+  0% { opacity: 0; transform: translate(0, 0) scale(.4); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .luck-flip-inner { transition: none; }
+  .luck-float, .luck-burst, .luck-sparkle { animation: none; opacity: 0; }
+}
+
 .tilt-card {
   border: 1px solid hsl(var(--border));
   border-radius: 20px;
