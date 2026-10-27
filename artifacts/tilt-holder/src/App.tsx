@@ -11,6 +11,7 @@ import {
   rankingAtDate,
   rankingTier,
   tierLevel,
+  type Tier,
 } from '@/lib/player-stats';
 import { shareElementImage, shareOrDownloadBlob, withTemporaryStyles } from '@/lib/share-image';
 import { ApiError, api, setAdminPassword } from '@/lib/api';
@@ -1366,6 +1367,9 @@ function TierTableModal({ totalRanked, onClose }: { totalRanked: number; onClose
   );
 }
 
+// Date results fit two badges on one row, so the longest tier name is shortened there.
+const shortTierLabel = (tier: Tier | null) => (tier?.label === '그랜드마스터' ? '그마' : undefined);
+
 function RankingScreen({
   users,
   historyDates,
@@ -1737,29 +1741,30 @@ function RankingScreen({
                 : tierLevel(after.label) - tierLevel(before.label);
               const buyInCount = shownDetail?.buyIns?.[player.name];
               return (
-                <div key={player.name} className="col-span-full grid grid-cols-subgrid items-center px-3.5 py-3 max-[379px]:px-2.5" data-testid={`row-date-result-${player.name}`}>
-                  <span className="whitespace-nowrap pr-2 text-sm font-bold text-[#20253a] max-[379px]:pr-1">{player.name}</span>
-                  <TierBadge tier={tierShift === 0 ? after : before} className="justify-self-start" />
-                  <span className="flex justify-center px-0.5 max-[379px]:px-0" data-testid={`tier-change-${player.name}`}>
-                    {tierShift === 0 ? (
-                      <Equal size={13} strokeWidth={2.5} className="text-[#b4b8c4]" aria-label="티어 유지" />
-                    ) : (
-                      <ArrowRight size={13} strokeWidth={2.5} className={tierShift > 0 ? 'text-[#16a34a]' : 'text-[#dc2626]'} aria-label={tierShift > 0 ? '티어 상승' : '티어 하락'} />
-                    )}
+                <div key={player.name} className="col-span-full grid grid-cols-subgrid items-center px-4 py-3.5 max-[379px]:px-3" data-testid={`row-date-result-${player.name}`}>
+                  <span className="whitespace-nowrap pr-3 text-sm font-bold text-[#20253a] max-[379px]:pr-2">{player.name}</span>
+                  <TierBadge tier={tierShift === 0 ? after : before} label={shortTierLabel(tierShift === 0 ? after : before)} className="justify-self-start" />
+                  <span className="flex justify-center px-2 max-[379px]:px-1" data-testid={`tier-change-${player.name}`}>
+                    <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-full ${tierShift > 0 ? 'bg-[#e7f6ec] text-[#16a34a]' : tierShift < 0 ? 'bg-[#fdeceb] text-[#dc2626]' : 'bg-[#f1f2f5] text-[#a8adba]'}`}>
+                      {tierShift === 0 ? (
+                        <Equal size={11} strokeWidth={3} aria-label="티어 유지" />
+                      ) : (
+                        <ArrowRight size={11} strokeWidth={3} aria-label={tierShift > 0 ? '티어 상승' : '티어 하락'} />
+                      )}
+                    </span>
                   </span>
                   {tierShift === 0 ? (
-                    <span className="text-[10px] font-bold text-[#a0a4b1]">유지</span>
+                    <span className="text-[11px] font-semibold text-[#a8adba]">유지</span>
                   ) : (
-                    <TierBadge tier={after} className="justify-self-start" />
+                    <TierBadge tier={after} label={shortTierLabel(after)} className="justify-self-start" />
                   )}
                   <span />
-                  <div className="pl-2 text-right max-[379px]:pl-1">
-                    {/* Narrow phones (Galaxy, 360px) drop the trailing 원 so two badges still fit. */}
-                    <p className={`mono whitespace-nowrap text-[14px] font-bold tracking-[-0.04em] max-[379px]:text-[13px] ${value > 0 ? 'text-[#3f7a1f]' : value < 0 ? 'text-[#c0392b]' : 'text-[#858a9b]'}`} data-testid={`text-date-amount-${player.name}`}>
-                      {formatManwon(value).slice(0, -1)}<span className="max-[379px]:hidden">원</span>
+                  <div className="pl-2.5 text-right max-[379px]:pl-2">
+                    <p className={`mono whitespace-nowrap text-[15px] font-bold tracking-[-0.04em] max-[379px]:text-[13px] ${value > 0 ? 'text-[#3f7a1f]' : value < 0 ? 'text-[#c0392b]' : 'text-[#858a9b]'}`} data-testid={`text-date-amount-${player.name}`}>
+                      {formatManwon(value)}
                     </p>
                     {buyInCount !== undefined ? (
-                      <p className="mt-0.5 whitespace-nowrap text-[11px] text-[#858a9b]" data-testid={`text-date-buyins-${player.name}`}>바이인 {buyInCount}회</p>
+                      <p className="mt-0.5 whitespace-nowrap text-[11px] text-[#9aa0ae]" data-testid={`text-date-buyins-${player.name}`}>바이인 {buyInCount}회</p>
                     ) : null}
                   </div>
                 </div>
