@@ -35,6 +35,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CirclePlus,
+  Save,
   Equal,
   Clock3,
   Crown,
@@ -243,6 +244,15 @@ function AppShell() {
   const [buyInArrows, setBuyInArrows] = useState<Record<PlayerName, 'up' | 'down'>>({});
   const [buyInLog, setBuyInLog] = useState<BuyInLogEntry[]>([]);
   const [handHistories, setHandHistories] = useState<HandHistory[]>([]);
+  // Final amounts typed on the settle tab but not saved yet. A refresh keeps them
+  // instead of overwriting them with the server's copy.
+  const [finalAmountsDirty, setFinalAmountsDirtyState] = useState(false);
+  const finalAmountsDirtyRef = useRef(false);
+  const setFinalAmountsDirty = (dirty: boolean) => {
+    finalAmountsDirtyRef.current = dirty;
+    setFinalAmountsDirtyState(dirty);
+  };
+  const [finalAmountsSavedAt, setFinalAmountsSavedAt] = useState<string | null>(null);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   // True when launched from the home-screen shortcut. Browsers can't tell a regular
   // tab whether a shortcut exists, so in a normal tab the button stays visible.
@@ -392,17 +402,17 @@ function AppShell() {
 
       const serverSession = data.session;
       if (serverSession && !serverSession.fundApplied) {
-        setSession({
+        setSession((current) => ({
           date: serverSession.date,
           gameName: serverSession.gameName,
           participantNames: serverSession.participantNames,
           buyIns: serverSession.buyIns,
-          finalAmounts: serverSession.finalAmounts,
+          finalAmounts: finalAmountsDirtyRef.current && current.date === serverSession.date ? current.finalAmounts : serverSession.finalAmounts,
           hostName: serverSession.hostName,
           bankName: serverSession.bankName,
           isFinished: serverSession.isFinished,
           fundApplied: serverSession.fundApplied,
-        });
+        }));
         setBuyInArrows(serverSession.buyInArrows ?? {});
         setBuyInLog(serverSession.buyInLog ?? []);
         setHandHistories(Array.isArray(serverSession.handHistories) ? serverSession.handHistories : []);
@@ -413,6 +423,7 @@ function AppShell() {
         setBuyInArrows({});
         setBuyInLog([]);
         setHandHistories([]);
+        setFinalAmountsDirty(false);
         setIsEditingBuyIns(false);
         setBuyInEditSnapshot(null);
       }
@@ -447,10 +458,31 @@ function AppShell() {
     fetchAppData();
   }, []);
 
+  const refreshInFlightRef = useRef(false);
   const handleRefreshClick = async () => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
     setIsRefreshing(true);
     await fetchAppData();
     setIsRefreshing(false);
+    refreshInFlightRef.current = false;
+  };
+
+  // The game and settle tabs change during a game, so opening them (or tapping
+  // them again) pulls the latest from the server.
+  const handleTabChange = (tab: TabKey) => {
+    setActiveTab(tab);
+    if (tab === 'game' || tab === 'settle') handleRefreshClick();
+  };
+
+  const saveFinalAmounts = async () => {
+    try {
+      await api('/api/session/final-amounts', { method: 'PUT', body: { date: session.date, finalAmounts: session.finalAmounts } });
+      setFinalAmountsDirty(false);
+      setFinalAmountsSavedAt(new Date().toLocaleTimeString('ko-KR', { hour12: false, hour: '2-digit', minute: '2-digit' }));
+    } catch (error) {
+      handleSyncError(error);
+    }
   };
 
   const participantDetails = users.filter((player) => session.participantNames.includes(player.name));
@@ -513,6 +545,7 @@ function AppShell() {
     setBuyInArrows({});
     setBuyInLog([]);
     setHandHistories([]);
+    setFinalAmountsDirty(false);
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
     clearExpenses();
@@ -566,6 +599,7 @@ function AppShell() {
   };
 
   const updateFinalAmount = (name: PlayerName, value: number) => {
+    setFinalAmountsDirty(true);
     setSession((current) => ({
       ...current,
       finalAmounts: {
@@ -729,6 +763,7 @@ function AppShell() {
     setIsEditingBuyIns(false);
     setBuyInEditSnapshot(null);
     setHandHistories([]);
+    setFinalAmountsDirty(false);
     // The game copies the session's hand histories, so only clear the session once it's saved.
     gameSaved.then(() => api('/api/session', { method: 'DELETE', admin: true })).catch(handleSyncError);
   };
@@ -894,6 +929,9 @@ function AppShell() {
             totalBuyIns={totalBuyIns}
             totalFinalChips={totalFinalChips}
             onFinalAmountChange={updateFinalAmount}
+            onSaveFinalAmounts={saveFinalAmounts}
+            finalAmountsDirty={finalAmountsDirty}
+            finalAmountsSavedAt={finalAmountsSavedAt}
             onAddExpense={addExpense}
             onFinishSession={requestCompleteSettlement}
             onSyncError={handleSyncError}
@@ -942,7 +980,7 @@ function AppShell() {
         config={passwordModalConfig}
         onClose={() => setPasswordModalConfig(null)}
       />
-      <BottomNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+      <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />
     </div>
   );
 }
@@ -1330,6 +1368,9 @@ function SettleScreen({
   totalBuyIns,
   totalFinalChips,
   onFinalAmountChange,
+  onSaveFinalAmounts,
+  finalAmountsDirty,
+  finalAmountsSavedAt,
   onAddExpense,
   onFinishSession,
   onSyncError,
@@ -1342,11 +1383,15 @@ function SettleScreen({
   totalBuyIns: number;
   totalFinalChips: number;
   onFinalAmountChange: (name: PlayerName, value: number) => void;
+  onSaveFinalAmounts: () => Promise<void>;
+  finalAmountsDirty: boolean;
+  finalAmountsSavedAt: string | null;
   onAddExpense: (title: string, amount: number) => void;
   onFinishSession: () => void;
   onSyncError: (error: unknown) => void;
 }) {
   const [showExpense, setShowExpense] = useState(false);
+  const [isSavingFinal, setIsSavingFinal] = useState(false);
   const [settled, setSettled] = useState<string[]>(() => expenses.filter((e: ExpenseEntry & { settled?: boolean }) => e.settled).map((e) => e.id));
   const [newExpense, setNewExpense] = useState({ title: '', amount: '' });
   const expenseTotal = expenses.reduce((total, expense) => total + expense.amount, 0);
@@ -1377,6 +1422,22 @@ function SettleScreen({
               </div>
             </div>
           ))}
+        </div>
+        <div className="mt-3 flex items-center gap-3" data-testid="panel-save-final-amounts">
+          <button
+            type="button"
+            onClick={async () => { setIsSavingFinal(true); await onSaveFinalAmounts(); setIsSavingFinal(false); }}
+            disabled={isSavingFinal || session.fundApplied}
+            className={`tilt-button flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-bold disabled:opacity-50 ${finalAmountsDirty ? 'bg-[#2d3d8f] text-white hover:bg-[#202e74]' : 'border border-[#dfe1ee] bg-white text-[#2d3d8f]'}`}
+            data-testid="button-save-final-amounts"
+          >
+            <Save size={14} /> {isSavingFinal ? '저장 중…' : '최종금액 임시 저장'}
+          </button>
+          <p className="break-keep text-[11px] leading-snug text-[#858a9b]" data-testid="text-final-amounts-status">
+            {finalAmountsDirty
+              ? <span className="font-bold text-[#c0392b]">저장 안 된 금액이 있어요</span>
+              : finalAmountsSavedAt ? `${finalAmountsSavedAt} 저장됨 · 모두에게 공유돼요` : '저장하면 다른 사람 폰에도 보여요'}
+          </p>
         </div>
       </div>
       <div className="rise-in delay-2 mt-6 flex items-center justify-between">

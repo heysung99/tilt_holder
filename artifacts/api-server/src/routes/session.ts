@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, currentSessionTable, pool } from "@workspace/db";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { hasValidAdminPassword, requireAdmin } from "../lib/admin.js";
 import { ensureColumns } from "../lib/columns.js";
 import { MAX_HANDS_PER_GAME, handRecordedPayload, parseHand } from "../lib/hand-history.js";
@@ -75,6 +75,11 @@ router.put("/session", async (req, res) => {
           handHistories: req.body.notify === "created"
             ? sql`'[]'::jsonb`
             : sql.raw(`CASE WHEN "current_session"."date" = excluded."date" THEN "current_session"."hand_histories" ELSE '[]'::jsonb END`),
+          // Final amounts are saved through /session/final-amounts for the same reason:
+          // a buy-in change from a phone that never saw them mustn't wipe them.
+          finalAmounts: req.body.notify === "created"
+            ? values.finalAmounts
+            : sql.raw(`CASE WHEN "current_session"."date" = excluded."date" THEN "current_session"."final_amounts" ELSE excluded."final_amounts" END`),
         },
       })
       .returning();
@@ -93,6 +98,39 @@ router.put("/session", async (req, res) => {
   } catch (error) {
     console.error("Failed to save current session:", error);
     res.status(500).json({ error: "Failed to save current session" });
+  }
+});
+
+// Saves the settle tab's final amounts for the game in progress so every phone sees
+// them. Open to everyone, like buy-ins.
+router.put("/session/final-amounts", async (req, res) => {
+  try {
+    const { date, finalAmounts } = req.body ?? {};
+    const valid = typeof date === "string"
+      && finalAmounts && typeof finalAmounts === "object" && !Array.isArray(finalAmounts)
+      && Object.keys(finalAmounts).length <= 30
+      && Object.entries(finalAmounts).every(([name, value]) => name.length <= 30 && typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100_000_000);
+    if (!valid) {
+      res.status(400).json({ error: "Invalid final amounts" });
+      return;
+    }
+    if (!db) {
+      res.status(503).json({ error: "Database not available" });
+      return;
+    }
+    await ensureColumns();
+    const [saved] = await db.update(currentSessionTable)
+      .set({ finalAmounts, updatedAt: new Date() })
+      .where(and(eq(currentSessionTable.id, SESSION_ID), eq(currentSessionTable.date, date)))
+      .returning({ finalAmounts: currentSessionTable.finalAmounts });
+    if (!saved) {
+      res.status(409).json({ error: "No matching game in progress" });
+      return;
+    }
+    res.json(saved);
+  } catch (error) {
+    console.error("Failed to save final amounts:", error);
+    res.status(500).json({ error: "Failed to save final amounts" });
   }
 });
 
