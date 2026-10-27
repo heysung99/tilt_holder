@@ -138,8 +138,13 @@ function HandRecorder({
   onSave: (hand: HandHistory) => void;
   onClose: () => void;
 }) {
-  // Blinds carry over from the last hand with seats; the table's usual 500/500 otherwise.
-  const [hand, setHand] = useState<HandHistory>(() => emptyHand([], previous?.blinds ?? DEFAULT_BLINDS));
+  // Seats and blinds carry over from the last hand with seats, so whoever set up the
+  // table last (on any phone, once reloaded) sets it for everyone until someone
+  // changes it. Blinds default to the table's usual 500/500.
+  const [hand, setHand] = useState<HandHistory>(() => emptyHand(
+    previous?.seats.filter((name) => participants.includes(name)) ?? [],
+    previous?.blinds ?? DEFAULT_BLINDS,
+  ));
   const [step, setStep] = useState<Step>('seats');
   const [street, setStreet] = useState<Street>('preflop');
   const [actor, setActor] = useState<string | null>(null);
@@ -247,11 +252,14 @@ function HandRecorder({
               <p className="text-sm font-bold text-[#20253a]">딜러(BTN)부터 시계방향으로 이름을 누르세요</p>
               <p className="mt-0.5 text-xs text-[#858a9b]">한 번 더 누르면 빠져요. 이 핸드에 앉은 사람만 고르면 돼요.</p>
               {previous?.seats.length ? (
+                <p className="mt-2 rounded-lg bg-[#f3f4ff] px-2.5 py-1.5 text-[11px] font-semibold text-[#2d3d8f]" data-testid="text-seats-carried">지난 핸드 자리를 그대로 불러왔어요. 바꾸면 다음부터 바뀐 자리로 시작해요.</p>
+              ) : null}
+              {hand.seats.length > 1 ? (
                 <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={() => setSeats([...previous.seats.slice(1), previous.seats[0]].filter((name) => participants.includes(name)))} className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-[#d5d8e6] bg-[#f3f4ff] py-2 text-xs font-bold text-[#2d3d8f]" data-testid="button-rotate-dealer">
-                    <RotateCw size={13} /> 지난 핸드에서 딜러 넘기기
+                  <button type="button" onClick={() => setSeats([...hand.seats.slice(1), hand.seats[0]])} className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-[#d5d8e6] bg-[#f3f4ff] py-2 text-xs font-bold text-[#2d3d8f]" data-testid="button-rotate-dealer">
+                    <RotateCw size={13} /> 딜러 한 칸 넘기기
                   </button>
-                  <button type="button" onClick={() => setSeats(previous.seats.filter((name) => participants.includes(name)))} className="rounded-xl border border-[#e4e5ea] px-3 py-2 text-xs font-bold text-[#596078]">같은 자리</button>
+                  <button type="button" onClick={() => setSeats([])} className="rounded-xl border border-[#e4e5ea] px-3 py-2 text-xs font-bold text-[#596078]" data-testid="button-clear-seats">처음부터</button>
                 </div>
               ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
