@@ -123,12 +123,14 @@ type Step = 'seats' | 'actions' | 'result';
 
 function HandRecorder({
   number,
+  gameLabel,
   participants,
   previous,
   onSave,
   onClose,
 }: {
   number: number;
+  gameLabel: string;
   participants: string[];
   // The latest hand with seats, for rotating the dealer and reusing the blinds.
   previous: HandHistory | null;
@@ -218,7 +220,7 @@ function HandRecorder({
       <div className="rise-in flex max-h-[92vh] w-full max-w-[480px] flex-col rounded-t-[24px] bg-white shadow-2xl sm:rounded-[24px]">
         <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4">
           <div>
-            <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">hand #{number}</p>
+            <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">hand #{number} · {gameLabel}</p>
             <h3 className="mt-0.5 text-lg font-bold text-[#20253a]">핸드 기록</h3>
           </div>
           <button type="button" onClick={onClose} className="rounded-full bg-[#f1f1ee] p-1.5 text-[#697087]" aria-label="닫기"><X size={16} /></button>
@@ -588,22 +590,33 @@ export function HandHistoryModal({ hands, subtitle, onClose }: { hands: HandHist
 
 const COLLAPSED_COUNT = 5;
 
-// Bottom of the game tab: record button plus the hands so far, newest first.
+// A game whose hands can be viewed and added to: the one in progress or a past date.
+export type HandGame = {
+  key: string;
+  date: string;
+  label: string;
+  live: boolean;
+  participants: string[];
+  hands: HandHistory[];
+};
+
+// Bottom of the game tab: pick a game (the live one or any past date), then record
+// hands for it and see its hands so far, newest first.
 export default function HandHistorySection({
-  participants,
-  hands,
-  canRecord,
+  games,
   onRecord,
   onDelete,
 }: {
-  participants: string[];
-  hands: HandHistory[];
-  canRecord: boolean;
-  onRecord: (hand: HandHistory) => void;
-  onDelete: (hand: HandHistory) => void;
+  games: HandGame[];
+  onRecord: (game: HandGame, hand: HandHistory) => void;
+  onDelete: (game: HandGame, hand: HandHistory) => void;
 }) {
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  // Defaults to the game in progress, else the latest settled one.
+  const game = games.find((item) => item.key === selectedKey) ?? games[0] ?? null;
+  const hands = game?.hands ?? [];
   const visible = showAll ? hands : hands.slice(-COLLAPSED_COUNT);
   const offset = hands.length - visible.length;
 
@@ -617,20 +630,40 @@ export default function HandHistorySection({
           </div>
           <span className="text-xs text-[#858a9b]">{hands.length}핸드</span>
         </div>
+        {games.length > 0 ? (
+          <div className="relative mb-2">
+            <label className="sr-only" htmlFor="hand-game-select">기록할 게임 선택</label>
+            <select
+              id="hand-game-select"
+              value={game?.key ?? ''}
+              onChange={(event) => { setSelectedKey(event.target.value); setShowAll(false); }}
+              className="h-11 w-full appearance-none rounded-xl border border-[#dfe1ee] bg-white pl-3 pr-9 text-sm font-bold text-[#20253a] outline-none focus:border-[#2d3d8f]"
+              data-testid="select-hand-game"
+            >
+              {games.map((item) => (
+                <option key={item.key} value={item.key}>{item.label}</option>
+              ))}
+            </select>
+            <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#858a9b]" />
+          </div>
+        ) : null}
+        {game && !game.live ? (
+          <p className="mb-2 text-[11px] text-[#858a9b]" data-testid="text-past-game-note">지난 게임에 추가하는 기록이에요. 그날 참가자 {game.participants.length}명으로 기록해요.</p>
+        ) : null}
         <button
           type="button"
-          disabled={!canRecord}
+          disabled={!game}
           onClick={() => setIsRecording(true)}
           className="tilt-button flex w-full items-center justify-center gap-2 rounded-[16px] bg-[#2d3d8f] py-3.5 text-sm font-bold text-white shadow-[0_10px_24px_rgba(45,61,143,.16)] hover:bg-[#202e74] disabled:cursor-not-allowed disabled:opacity-40"
           data-testid="button-record-hand"
         >
-          <NotebookPen size={16} /> {canRecord ? '핸드 기록하기' : '게임이 시작되면 기록할 수 있어요'}
+          <NotebookPen size={16} /> {game ? '핸드 기록하기' : '게임이 시작되면 기록할 수 있어요'}
         </button>
-        {hands.length > 0 ? (
+        {hands.length > 0 && game ? (
           <div className="tilt-card mt-3 overflow-hidden">
             <div className="divide-y divide-[#ececf0]">
               {visible.map((hand, index) => ({ hand, number: offset + index + 1 })).reverse().map(({ hand, number }) => (
-                <HandHistoryCard key={hand.id} hand={hand} number={number} onDelete={() => onDelete(hand)} />
+                <HandHistoryCard key={hand.id} hand={hand} number={number} onDelete={() => onDelete(game, hand)} />
               ))}
             </div>
             {hands.length > COLLAPSED_COUNT ? (
@@ -642,12 +675,13 @@ export default function HandHistorySection({
         ) : null}
       </section>
       {/* Outside the rise-in section: its animation transform would trap the fixed overlay. */}
-      {isRecording ? (
+      {isRecording && game ? (
         <HandRecorder
           number={hands.length + 1}
-          participants={participants}
+          gameLabel={game.label}
+          participants={game.participants}
           previous={[...hands].reverse().find((hand) => hand.seats.length > 0) ?? null}
-          onSave={(hand) => { onRecord(hand); setIsRecording(false); }}
+          onSave={(hand) => { onRecord(game, hand); setIsRecording(false); }}
           onClose={() => setIsRecording(false)}
         />
       ) : null}

@@ -19,7 +19,7 @@ import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 import TierBadge from '@/components/tier-badge';
 import DailyFortune from '@/components/daily-fortune';
-import HandHistorySection, { HandHistoryModal } from '@/components/hand-history';
+import HandHistorySection, { type HandGame, HandHistoryModal } from '@/components/hand-history';
 import { type HandHistory, renameInHand } from '@/lib/hand-history';
 
 import {
@@ -726,15 +726,49 @@ function AppShell() {
     gameSaved.then(() => api('/api/session', { method: 'DELETE', admin: true })).catch(handleSyncError);
   };
 
-  const recordHand = (hand: HandHistory) => {
-    setHandHistories((current) => [...current, hand]);
-    api('/api/session/history', { method: 'POST', body: { date: session.date, hand } }).catch(handleSyncError);
+  // Hands can go to the game in progress or to any settled date; a settled date's
+  // hands live with its game result.
+  const isSessionLive = session.participantNames.length > 0 && !session.fundApplied;
+  const handGames: HandGame[] = [
+    ...(isSessionLive
+      ? [{ key: 'live', date: session.date, label: `${formatDateWithWeekday(session.date)} · 진행 중`, live: true, participants: session.participantNames, hands: handHistories }]
+      : []),
+    ...historyDates.map((date, index) => ({
+      key: date,
+      date,
+      label: formatDateWithWeekday(date),
+      live: false,
+      participants: historicalRecords.filter((record) => record.values[index] !== null && record.values[index] !== undefined).map((record) => record.name),
+      hands: gameDetails[date]?.handHistories ?? [],
+    })).reverse(),
+  ];
+
+  const updateGameHands = (date: string, change: (hands: HandHistory[]) => HandHistory[]) => {
+    setGameDetails((current) => {
+      const detail = current[date] ?? { buyIns: null, buyInLog: null, handHistories: null };
+      return { ...current, [date]: { ...detail, handHistories: change(detail.handHistories ?? []) } };
+    });
   };
 
-  const deleteHand = (hand: HandHistory) => {
+  const recordHand = (game: HandGame, hand: HandHistory) => {
+    if (game.live) {
+      setHandHistories((current) => [...current, hand]);
+      api('/api/session/history', { method: 'POST', body: { date: session.date, hand } }).catch(handleSyncError);
+      return;
+    }
+    updateGameHands(game.date, (hands) => [...hands, hand]);
+    api(`/api/games/${encodeURIComponent(game.date)}/history`, { method: 'POST', body: { hand } }).catch(handleSyncError);
+  };
+
+  const deleteHand = (game: HandGame, hand: HandHistory) => {
     verifyPassword('핸드 기록 삭제', () => {
-      setHandHistories((current) => current.filter((item) => item.id !== hand.id));
-      api(`/api/session/history/${encodeURIComponent(hand.id)}`, { method: 'DELETE', admin: true }).catch(handleSyncError);
+      if (game.live) {
+        setHandHistories((current) => current.filter((item) => item.id !== hand.id));
+        api(`/api/session/history/${encodeURIComponent(hand.id)}`, { method: 'DELETE', admin: true }).catch(handleSyncError);
+        return;
+      }
+      updateGameHands(game.date, (hands) => hands.filter((item) => item.id !== hand.id));
+      api(`/api/games/${encodeURIComponent(game.date)}/history/${encodeURIComponent(hand.id)}`, { method: 'DELETE', admin: true }).catch(handleSyncError);
     });
   };
 
@@ -832,7 +866,7 @@ function AppShell() {
             isEditingBuyIns={isEditingBuyIns}
             buyInArrows={buyInArrows}
             buyInLog={buyInLog}
-            handHistories={handHistories}
+            handGames={handGames}
             onRecordHand={recordHand}
             onDeleteHand={deleteHand}
             onStartEditBuyIns={startEditingBuyIns}
@@ -925,7 +959,7 @@ function GameScreen({
   isEditingBuyIns,
   buyInArrows,
   buyInLog,
-  handHistories,
+  handGames,
   onRecordHand,
   onDeleteHand,
   onStartEditBuyIns,
@@ -943,9 +977,9 @@ function GameScreen({
   isEditingBuyIns: boolean;
   buyInArrows: Record<PlayerName, 'up' | 'down'>;
   buyInLog: BuyInLogEntry[];
-  handHistories: HandHistory[];
-  onRecordHand: (hand: HandHistory) => void;
-  onDeleteHand: (hand: HandHistory) => void;
+  handGames: HandGame[];
+  onRecordHand: (game: HandGame, hand: HandHistory) => void;
+  onDeleteHand: (game: HandGame, hand: HandHistory) => void;
   onStartEditBuyIns: () => void;
   onFinishEditBuyIns: () => void;
   onVerifyPassword: (title: string, onSuccess: () => void) => void;
@@ -1138,13 +1172,7 @@ function GameScreen({
         </button>
       </section>
 
-      <HandHistorySection
-        participants={session.participantNames}
-        hands={handHistories}
-        canRecord={isSessionInProgress}
-        onRecord={onRecordHand}
-        onDelete={onDeleteHand}
-      />
+      <HandHistorySection games={handGames} onRecord={onRecordHand} onDelete={onDeleteHand} />
 
       {showBuyInLog ? <BuyInLogModal log={buyInLog} onClose={() => setShowBuyInLog(false)} /> : null}
       <Suspense fallback={playerAnalysisFallback}>
