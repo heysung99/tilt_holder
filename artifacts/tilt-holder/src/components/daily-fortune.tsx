@@ -1,4 +1,6 @@
-import { type CSSProperties, useEffect, useState } from 'react';
+import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { Share2 } from 'lucide-react';
+import { shareElementImage } from '@/lib/share-image';
 import {
   type Card,
   type DailyDraw,
@@ -94,6 +96,21 @@ function FortuneText({ fortune }: { fortune: string }) {
 function FortuneModal({ draw, reveal, onClose }: { draw: DailyDraw; reveal: boolean; onClose: () => void }) {
   const hand = describeHand(draw.cards);
   const [stage, setStage] = useState(reveal ? 0 : 3);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // The capture uses flat cards and square corners: 3D-flipped faces and the rounded
+  // edge (which would come out as white corners) don't survive the image copy.
+  const handleShare = async () => {
+    if (!cardRef.current || isCapturing) return;
+    setIsCapturing(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      await shareElementImage(cardRef.current, `today-luck-${draw.date}.png`);
+    } finally {
+      setIsCapturing(false);
+    }
+  };
 
   useEffect(() => {
     if (!reveal) return;
@@ -107,17 +124,24 @@ function FortuneModal({ draw, reveal, onClose }: { draw: DailyDraw; reveal: bool
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" onClick={onClose} data-testid="modal-daily-fortune" data-stage={stage}>
-      <div className="rise-in w-full max-w-[380px] overflow-hidden rounded-[24px] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      <div ref={cardRef} className={`rise-in w-full max-w-[380px] overflow-hidden bg-white shadow-2xl ${isCapturing ? '' : 'rounded-[24px]'}`} onClick={(event) => event.stopPropagation()}>
         <div className="relative overflow-hidden bg-[radial-gradient(circle_at_50%_0%,#3a4ba3,#202e74)] px-6 pb-7 pt-5 text-white">
           <div className="relative z-10 flex items-center justify-between">
             <div>
               <p className="mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#cbd1f2]">today's luck · {formatDrawDate(draw.date)}</p>
               <h3 className="mt-1 text-lg font-bold">오늘의 운세 & 핸드</h3>
             </div>
-            <button type="button" onClick={onClose} className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white hover:bg-white/25">닫기</button>
+            <div className="flex items-center gap-2" data-share-exclude="true">
+              {stage >= 3 ? (
+                <button type="button" onClick={handleShare} disabled={isCapturing} className="flex items-center justify-center rounded-full bg-white/15 p-1.5 text-white hover:bg-white/25 disabled:opacity-50" aria-label="운세 이미지 공유" data-testid="button-share-fortune">
+                  <Share2 size={15} />
+                </button>
+              ) : null}
+              <button type="button" onClick={onClose} className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white hover:bg-white/25">닫기</button>
+            </div>
           </div>
           <div className="relative mt-6 flex justify-center" data-testid="daily-fortune-cards">
-            {reveal && stage >= 2 ? (
+            {reveal && stage >= 2 && !isCapturing ? (
               <>
                 <span className="luck-burst pointer-events-none absolute left-1/2 top-1/2 -ml-[130px] -mt-[130px] h-[260px] w-[260px] rounded-full bg-[radial-gradient(circle,rgba(255,240,150,1),rgba(255,214,90,.55)_35%,rgba(255,214,90,0)_68%)]" />
                 {SPARKLES.map((sparkle, index) => (
@@ -131,8 +155,17 @@ function FortuneModal({ draw, reveal, onClose }: { draw: DailyDraw; reveal: bool
                 ))}
               </>
             ) : null}
-            <span className={`relative -mr-1.5 -rotate-[7deg] ${stage === 0 ? 'luck-float' : ''}`}><FlipCard card={draw.cards[0]} flipped={stage >= 1} /></span>
-            <span className={`relative translate-y-1.5 rotate-[7deg] ${stage === 0 ? 'luck-float' : ''}`}><FlipCard card={draw.cards[1]} flipped={stage >= 2} /></span>
+            {isCapturing ? (
+              <>
+                <PlayingCard card={draw.cards[0]} size="large" className="-mr-1.5 -rotate-[7deg]" />
+                <PlayingCard card={draw.cards[1]} size="large" className="translate-y-1.5 rotate-[7deg]" />
+              </>
+            ) : (
+              <>
+                <span className={`relative -mr-1.5 -rotate-[7deg] ${stage === 0 ? 'luck-float' : ''}`}><FlipCard card={draw.cards[0]} flipped={stage >= 1} /></span>
+                <span className={`relative translate-y-1.5 rotate-[7deg] ${stage === 0 ? 'luck-float' : ''}`}><FlipCard card={draw.cards[1]} flipped={stage >= 2} /></span>
+              </>
+            )}
           </div>
         </div>
         <div className="min-h-[220px] px-6 pb-6 pt-5">
@@ -145,7 +178,7 @@ function FortuneModal({ draw, reveal, onClose }: { draw: DailyDraw; reveal: bool
               <div className="mt-4 rounded-2xl bg-[#f6f6f1] px-4 py-4" data-testid="text-daily-fortune">
                 <FortuneText fortune={draw.fortune} />
               </div>
-              <p className="mt-4 text-center text-[11px] text-[#9aa0ae]">하루에 한 번만 뽑혀요. 내일 새로운 운세를 확인하세요!</p>
+              <p className="mt-4 text-center text-[11px] text-[#9aa0ae]">{isCapturing ? 'TILT HOLDER · 오늘의 운세 & 핸드' : '하루에 한 번만 뽑혀요. 내일 새로운 운세를 확인하세요!'}</p>
             </div>
           ) : (
             <p className="pt-16 text-center text-sm font-semibold text-[#9aa0ae]">오늘의 패를 뒤집는 중…</p>
