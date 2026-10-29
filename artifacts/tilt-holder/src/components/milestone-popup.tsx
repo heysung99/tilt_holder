@@ -22,7 +22,7 @@ export function markMilestoneSeen(number: number) {
   }
 }
 
-// Announces a round-numbered game (100, 200, …): "next game" once the one before it
+// Announces a round-numbered game (50, 100, 150, …): "next game" once the one before it
 // is settled, "today" while it's being played.
 export default function MilestonePopup({ number, live, onClose }: { number: number; live: boolean; onClose: () => void }) {
   return (

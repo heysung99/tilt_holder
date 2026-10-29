@@ -292,7 +292,7 @@ function AppShell() {
   // Once per app open, after the setup guide (if any) is out of the way, the game tab
   // invites anyone who hasn't drawn today's fortune yet.
   const [fortunePromptPending, setFortunePromptPending] = useState(true);
-  // A 100th (200th, …) game announcement comes between the setup guide and the fortune.
+  // A 50th (100th, 150th, …) game announcement comes between the setup guide and the fortune.
   const [milestone, setMilestone] = useState<{ number: number; live: boolean } | null>(null);
   const [milestoneResolved, setMilestoneResolved] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -799,7 +799,7 @@ function AppShell() {
   useEffect(() => {
     if (milestoneResolved || !dataLoaded || !guideResolved || showGuide) return;
     const number = isSessionLive ? liveGameNumber : historyDates.length + 1;
-    if (number % 100 === 0 && !milestoneSeenToday(number)) {
+    if (number % 50 === 0 && !milestoneSeenToday(number)) {
       markMilestoneSeen(number);
       setMilestone({ number, live: isSessionLive });
     } else {
