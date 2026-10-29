@@ -18,6 +18,8 @@ function formatGameDate(date: string | undefined, index: number) {
   return `${year.slice(2)}.${month}.${day}`;
 }
 
+const winRateLabel = (matchup: Matchup) => `${Math.round(headToHeadRate(matchup) * 100)}%`;
+
 const amountColor = (value: number) => (value > 0 ? 'text-[#16a34a]' : value < 0 ? 'text-[#dc2626]' : 'text-[#858a9b]');
 
 function BestWorstCard({ kind, name, matchup, onPick }: { kind: 'best' | 'worst'; name: PlayerName; matchup: Matchup; onPick: (name: PlayerName) => void }) {
@@ -31,14 +33,14 @@ function BestWorstCard({ kind, name, matchup, onPick }: { kind: 'best' | 'worst'
     >
       <p className={`text-[11px] font-bold ${best ? 'text-[#16803c]' : 'text-[#c0392b]'}`}>{best ? '😊 최고의 상성' : '😈 최악의 상성'}</p>
       <p className="mt-1 text-base font-extrabold text-[#20253a]">{name}</p>
-      <p className="mono mt-0.5 text-[11px] font-bold text-[#596078]">{matchup.aAhead}승 {matchup.bAhead}패</p>
+      <p className="mono mt-0.5 whitespace-nowrap text-[11px] font-bold text-[#596078]">{winRateLabel(matchup)} · {matchup.aAhead}승 {matchup.bAhead}패</p>
       <p className={`mono text-sm font-bold ${amountColor(matchup.aSum)}`}>{formatManwon(matchup.aSum)}</p>
     </button>
   );
 }
 
-// Everyone who has sat at a table with the player, most shared games first, with
-// the best and worst matchups (by head-to-head, then money) pulled out on top.
+// Everyone who has shared at least MATCHUP_MIN_GAMES tables with the player, by the
+// player's money in those games; the two ends are pulled out as best and worst.
 export function MatchupPicker({
   playerName,
   users,
@@ -53,30 +55,23 @@ export function MatchupPicker({
   const opponents = users
     .filter((user) => user.name !== playerName)
     .map((user) => ({ name: user.name, matchup: computeMatchup(playerName, user.name, historicalRecords) }))
-    .filter((item) => item.matchup.together > 0)
-    .sort((a, b) => b.matchup.together - a.matchup.together);
+    .filter((item) => item.matchup.together >= MATCHUP_MIN_GAMES)
+    .sort((a, b) => b.matchup.aSum - a.matchup.aSum || headToHeadRate(b.matchup) - headToHeadRate(a.matchup));
 
   if (opponents.length === 0) {
-    return <p className="mt-6 text-sm text-[#858a9b]">아직 함께 플레이한 사람이 없어요.</p>;
+    return <p className="mt-6 text-sm text-[#858a9b]">아직 {MATCHUP_MIN_GAMES}판 이상 함께한 사람이 없어요.</p>;
   }
 
-  const ranked = opponents
-    .filter((item) => item.matchup.together >= MATCHUP_MIN_GAMES)
-    .sort((a, b) => headToHeadRate(b.matchup) - headToHeadRate(a.matchup) || b.matchup.aSum - a.matchup.aSum);
-  const best = ranked[0];
-  const worst = ranked.length > 1 ? ranked[ranked.length - 1] : undefined;
+  const best = opponents[0];
+  const worst = opponents.length > 1 ? opponents[opponents.length - 1] : undefined;
 
   return (
     <div className="mt-4" data-testid="matchup-picker">
-      {best ? (
-        <div className={`grid gap-2 ${worst ? 'grid-cols-2' : 'grid-cols-1'}`}>
-          <BestWorstCard kind="best" name={best.name} matchup={best.matchup} onPick={onPick} />
-          {worst ? <BestWorstCard kind="worst" name={worst.name} matchup={worst.matchup} onPick={onPick} /> : null}
-        </div>
-      ) : (
-        <p className="rounded-xl bg-[#fafaf6] px-3 py-2 text-[11px] text-[#858a9b]">{MATCHUP_MIN_GAMES}판 이상 함께한 상대가 생기면 최고·최악의 상성을 보여줘요.</p>
-      )}
-      <p className="mt-4 text-xs text-[#858a9b]">상대를 고르면 둘이 함께한 게임만으로 상성을 보여줘요. 금액은 함께한 판에서 {playerName} 합계예요.</p>
+      <div className={`grid gap-2 ${worst ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        <BestWorstCard kind="best" name={best.name} matchup={best.matchup} onPick={onPick} />
+        {worst ? <BestWorstCard kind="worst" name={worst.name} matchup={worst.matchup} onPick={onPick} /> : null}
+      </div>
+      <p className="mt-4 text-xs text-[#858a9b]">{MATCHUP_MIN_GAMES}판 이상 함께한 상대만, {playerName} 금액이 높은 순이에요. 금액은 함께한 판에서 {playerName} 합계, 승률은 둘 중 더 많이 딴 판의 비율이에요.</p>
       <div className="mt-2 divide-y divide-[#ececf0] rounded-2xl border border-[#ececf0]">
         {opponents.map(({ name, matchup }) => (
           <button
@@ -91,7 +86,7 @@ export function MatchupPicker({
               <span className="block text-[11px] text-[#858a9b]">{matchup.together}판 함께</span>
             </span>
             <span className="text-right">
-              <span className="mono block text-xs font-bold text-[#2d3d8f]">{matchup.aAhead}승 {matchup.bAhead}패</span>
+              <span className="mono block text-xs font-bold text-[#2d3d8f]">{winRateLabel(matchup)} <span className="text-[#858a9b]">· {matchup.aAhead}승 {matchup.bAhead}패</span></span>
               <span className={`mono block text-xs font-bold ${amountColor(matchup.aSum)}`}>{formatManwon(matchup.aSum)}</span>
             </span>
           </button>
