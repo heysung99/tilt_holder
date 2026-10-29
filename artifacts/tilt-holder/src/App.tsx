@@ -1704,13 +1704,12 @@ function RankingScreen({
 
       <section ref={rankingCardRef} className="rise-in delay-1 tilt-card overflow-hidden" data-testid="card-ranking-list">
         <div className="flex items-center justify-between border-b border-[#ececf0] px-5 py-4">
-          <div>
-            <span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">
-              ranked · {rankedPlayers.length} players ({selectedSeason === 'ALL' ? '전체' : `${selectedSeason}년`}){' '}
-              {/* On narrow phones the game count drops to its own line instead of breaking mid-phrase. */}
-              <span className="whitespace-nowrap max-[379px]:block"><span className="max-[379px]:hidden">· </span>{activeIndices.length} games</span>
-            </span>
-            <p className="mt-1 text-xs text-[#858a9b]">
+          <div className="min-w-0">
+            {/* One line down to 360px wide: narrower phones get tighter letter spacing and a smaller size. */}
+            <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087] max-[439px]:tracking-[0.04em] max-[399px]:text-[9px] max-[399px]:tracking-normal" data-testid="text-ranking-summary">
+              ranked · {rankedPlayers.length} players ({selectedSeason === 'ALL' ? '전체' : `${selectedSeason}년`}) · {activeIndices.length} games
+            </p>
+            <p className="mt-1 text-xs text-[#858a9b] max-[399px]:text-[11px]" data-testid="text-ranking-subtitle">
               {selectedSeason === 'ALL' ? '5회 이상' : '1회 이상'} 참여자 · NET 누적상금 · 만원 단위
             </p>
           </div>
