@@ -204,6 +204,11 @@ export function subjectParticle(name: string) {
   return code >= 0 && code <= 11171 && code % 28 !== 0 ? '이' : '가';
 }
 
+// 은/는 after a Korean name, the same way.
+export function topicParticle(name: string) {
+  return subjectParticle(name) === '이' ? '은' : '는';
+}
+
 export const MATCHUP_MIN_GAMES = 3;
 
 // Share of the decided shared games the first player finished ahead in.
@@ -212,22 +217,41 @@ export const headToHeadRate = (matchup: Matchup) => {
   return decided ? matchup.aAhead / decided : 0.5;
 };
 
+// How much a few shared games are trusted: the per-game average is pulled toward 0
+// as if MATCHUP_SHRINK games at ±0 had been played too.
+const MATCHUP_SHRINK = 5;
+export const matchupScore = (matchup: Matchup) => (matchup.aAvgWith * matchup.together) / (matchup.together + MATCHUP_SHRINK);
+
+// Head-to-head win rate (50% line) against the player's money in shared games (0 line).
+export type MatchupKind = 'prey' | 'trap' | 'sniper' | 'nemesis';
+export const MATCHUP_KINDS: Record<MatchupKind, { emoji: string; label: string; detail: string }> = {
+  prey: { emoji: '😊', label: '밥', detail: '자주 이기고 돈도 따요' },
+  trap: { emoji: '🪤', label: '함정', detail: '자주 이기는데 돈은 잃어요' },
+  sniper: { emoji: '🎯', label: '한방', detail: '자주 지지만 돈은 따요' },
+  nemesis: { emoji: '😈', label: '천적', detail: '자주 지고 돈도 잃어요' },
+};
+export function matchupKind(matchup: Matchup): MatchupKind {
+  const winning = headToHeadRate(matchup) >= 0.5;
+  const profiting = matchup.aSum > 0;
+  if (winning) return profiting ? 'prey' : 'trap';
+  return profiting ? 'sniper' : 'nemesis';
+}
+
 export function matchupVerdict(a: PlayerName, b: PlayerName, matchup: Matchup) {
   if (matchup.together < MATCHUP_MIN_GAMES) {
     return { emoji: '🤔', title: '아직 데이터 부족', detail: `함께한 게임이 ${MATCHUP_MIN_GAMES}판은 넘어야 상성을 볼 수 있어요.` };
   }
-  const decided = matchup.aAhead + matchup.bAhead;
-  const rate = decided ? matchup.aAhead / decided : 0.5;
-  const [leader, trailer] = rate >= 0.5 ? [a, b] : [b, a];
-  let verdict: { emoji: string; title: string };
-  if (rate >= 0.65 || rate <= 0.35) verdict = { emoji: '😈', title: `${leader}${subjectParticle(leader)} ${trailer}의 천적` };
-  else if (rate >= 0.55 || rate <= 0.45) verdict = { emoji: '💪', title: `${leader} 우세` };
-  else verdict = { emoji: '⚔️', title: '팽팽한 라이벌' };
+  // Headline from the quadrant (head-to-head × money), told from a's side about b.
+  const kind = matchupKind(matchup);
+  const { emoji } = MATCHUP_KINDS[kind];
+  const title = kind === 'nemesis'
+    ? `${b}${subjectParticle(b)} ${a}의 천적`
+    : `${b}${topicParticle(b)} ${a}의 ${kind === 'prey' ? '밥' : kind === 'trap' ? '함정' : '한방 상대'}`;
 
-  let detail = `${matchup.together}판 중 ${a} ${matchup.aAhead}번, ${b} ${matchup.bAhead}번 더 많이 땄어요.`;
+  let detail = `${matchup.together}판 중 ${a} ${matchup.aAhead}번, ${b} ${matchup.bAhead}번 더 많이 땄고 ${a} 합계는 ${formatManwon(matchup.aSum)}. ${MATCHUP_KINDS[kind].detail}.`;
   if (matchup.aAvgWith > 0 && matchup.bAvgWith > 0) detail += ' 같이 치면 둘 다 따는 사이 💰';
   else if (matchup.aAvgWith < 0 && matchup.bAvgWith < 0) detail += ' 같이 치면 둘 다 털리는 사이 💸';
-  return { ...verdict, detail };
+  return { emoji, title, detail };
 }
 
 export const VERDICT_MIN_GAMES = 3;
