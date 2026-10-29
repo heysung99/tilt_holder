@@ -1751,27 +1751,25 @@ function RankingScreen({
               }
 
               return (
-                <div className="px-3 py-1.5" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
-                  <div className="grid grid-cols-[64px_160px_110px_80px_1fr] items-center gap-2 whitespace-nowrap">
-                    <div className="flex items-center gap-1.5">
+                <div className="px-2.5 py-1.5" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
+                  <div className="grid grid-cols-[52px_178px_100px_80px_1fr] items-center gap-1.5 whitespace-nowrap">
+                    <div className="flex items-center gap-1">
                       <span className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rank === 1 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>
                         {String(rank).padStart(2, '0')}
                       </span>
-                      <div className="flex w-6 justify-center">{rankChange}</div>
+                      <div className="flex w-5 justify-center">{rankChange}</div>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="tilt-button text-sm font-bold text-[#20253a] hover:underline"
-                          data-testid={`button-player-analysis-${stat.player.name}`}
-                          onClick={() => setSelectedPlayerName(stat.player.name)}
-                        >
-                          {stat.player.name}
-                        </button>
-                        <TierBadge tier={tier} />
-                      </div>
-                      <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} className="mt-0.5" />
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="tilt-button mr-1 text-sm font-bold text-[#20253a] hover:underline"
+                        data-testid={`button-player-analysis-${stat.player.name}`}
+                        onClick={() => setSelectedPlayerName(stat.player.name)}
+                      >
+                        {stat.player.name}
+                      </button>
+                      <TierBadge tier={tier} label={shortTierLabel(tier)} />
+                      <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} />
                     </div>
                     <div>
                       <p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p>
@@ -1849,24 +1847,22 @@ function RankingScreen({
           {showUnranked ? <div className="overflow-x-auto">
             <div className="min-w-[650px] divide-y divide-[#ececf0]">
               {unrankedPlayers.map((stat, index) => (
-                <div className="px-3 py-1.5" key={stat.player.name} data-testid={`row-unranked-${stat.player.name}`}>
-                  <div className="grid grid-cols-[64px_160px_110px_80px_1fr] items-center gap-2 whitespace-nowrap">
+                <div className="px-2.5 py-1.5" key={stat.player.name} data-testid={`row-unranked-${stat.player.name}`}>
+                  <div className="grid grid-cols-[52px_178px_100px_80px_1fr] items-center gap-1.5 whitespace-nowrap">
                     <span className="mono flex h-7 w-7 items-center justify-center rounded-full bg-[#f1f1ee] text-xs font-bold text-[#858a9b]">
                       {String(index + 1).padStart(2, '0')}
                     </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="tilt-button text-sm font-bold text-[#20253a] hover:underline"
-                          data-testid={`button-player-analysis-${stat.player.name}`}
-                          onClick={() => setSelectedPlayerName(stat.player.name)}
-                        >
-                          {stat.player.name}
-                        </button>
-                        <TierBadge tier={null} />
-                      </div>
-                      <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} className="mt-0.5" />
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        className="tilt-button mr-1 text-sm font-bold text-[#20253a] hover:underline"
+                        data-testid={`button-player-analysis-${stat.player.name}`}
+                        onClick={() => setSelectedPlayerName(stat.player.name)}
+                      >
+                        {stat.player.name}
+                      </button>
+                      <TierBadge tier={null} />
+                      <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} />
                     </div>
                     <div>
                       <p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p>

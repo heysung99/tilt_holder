@@ -7,7 +7,7 @@ export default function StreakChip({ values, className = '' }: { values: (number
   const hot = streak > 0;
   return (
     <span
-      className={`inline-flex w-fit items-center rounded-md px-1.5 py-0.5 text-[10px] font-extrabold ${hot ? 'bg-[#fff1e0] text-[#c2410c]' : 'bg-[#e6f2fb] text-[#1d6fa5]'} ${className}`}
+      className={`inline-flex w-fit shrink-0 items-center rounded-md px-1 py-0.5 text-[10px] font-extrabold ${hot ? 'bg-[#fff1e0] text-[#c2410c]' : 'bg-[#e6f2fb] text-[#1d6fa5]'} ${className}`}
       data-testid="chip-streak"
     >
       {hot ? `🔥${streak}연승` : `🧊${-streak}연패`}
