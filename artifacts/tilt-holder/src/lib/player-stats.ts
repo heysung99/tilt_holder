@@ -222,18 +222,23 @@ export const headToHeadRate = (matchup: Matchup) => {
 const MATCHUP_SHRINK = 5;
 export const matchupScore = (matchup: Matchup) => (matchup.aAvgWith * matchup.together) / (matchup.together + MATCHUP_SHRINK);
 
-// Only the clear-cut matchups get a name: winning more often (head-to-head ≥ 50%) and
-// up money in shared games, or losing more often and down. Mixed ones go untagged.
-export type MatchupKind = 'gukbap' | 'nemesis';
+// A pair read from both sides at once. Money in the shared games decides partners: both
+// up is the best partnership, both down the worst. When one is up and the other isn't,
+// the head-to-head has to agree too: winning it and profiting while they don't makes
+// them a's 든든 국밥 (and a their 천적), the mirror image makes them a's 천적.
+export type MatchupKind = 'gukbap' | 'nemesis' | 'bestPartner' | 'worstPartner';
 export const MATCHUP_KINDS: Record<MatchupKind, { emoji: string; label: string; detail: string }> = {
-  gukbap: { emoji: '🍲', label: '든든 국밥', detail: '자주 이기고 돈도 따요' },
-  nemesis: { emoji: '😈', label: '천적', detail: '자주 지고 돈도 잃어요' },
+  gukbap: { emoji: '🍲', label: '든든 국밥', detail: '맞대결도 이기고 돈도 내 쪽으로 와요' },
+  nemesis: { emoji: '😈', label: '천적', detail: '맞대결도 지고 돈도 상대 쪽으로 가요' },
+  bestPartner: { emoji: '🤝', label: '최고의 파트너', detail: '같이 치면 둘 다 따요' },
+  worstPartner: { emoji: '💀', label: '최악의 파트너', detail: '같이 치면 둘 다 털려요' },
 };
 export function matchupKind(matchup: Matchup): MatchupKind | null {
-  const winning = headToHeadRate(matchup) >= 0.5;
-  const profiting = matchup.aSum > 0;
-  if (winning && profiting) return 'gukbap';
-  if (!winning && !profiting) return 'nemesis';
+  if (matchup.aSum > 0 && matchup.bSum > 0) return 'bestPartner';
+  if (matchup.aSum < 0 && matchup.bSum < 0) return 'worstPartner';
+  const rate = headToHeadRate(matchup);
+  if (matchup.aSum > 0 && rate >= 0.5) return 'gukbap';
+  if (matchup.bSum > 0 && rate < 0.5) return 'nemesis';
   return null;
 }
 
@@ -243,18 +248,16 @@ export function matchupVerdict(a: PlayerName, b: PlayerName, matchup: Matchup) {
   }
   // Told from a's side about b.
   const kind = matchupKind(matchup);
-  const winning = headToHeadRate(matchup) >= 0.5;
-  const verdict = kind === 'gukbap'
-    ? { emoji: '🍲', title: `${b}${topicParticle(b)} ${a}의 든든 국밥` }
+  const title = kind === 'gukbap'
+    ? `${b}${topicParticle(b)} ${a}의 든든 국밥`
     : kind === 'nemesis'
-      ? { emoji: '😈', title: `${b}${subjectParticle(b)} ${a}의 천적` }
-      : { emoji: '⚖️', title: '승률과 돈이 엇갈리는 사이' };
-  const summary = kind ? MATCHUP_KINDS[kind].detail : winning ? '자주 이기는데 돈은 잃어요' : '자주 지지만 돈은 따요';
-
-  let detail = `${matchup.together}판 중 ${a} ${matchup.aAhead}번, ${b} ${matchup.bAhead}번 더 많이 땄고 ${a} 합계는 ${formatManwon(matchup.aSum)}. ${summary}.`;
-  if (matchup.aAvgWith > 0 && matchup.bAvgWith > 0) detail += ' 같이 치면 둘 다 따는 사이 💰';
-  else if (matchup.aAvgWith < 0 && matchup.bAvgWith < 0) detail += ' 같이 치면 둘 다 털리는 사이 💸';
-  return { ...verdict, detail };
+      ? `${b}${subjectParticle(b)} ${a}의 천적`
+      : kind
+        ? `${a}·${b} ${MATCHUP_KINDS[kind].label}`
+        : '승률과 돈이 엇갈리는 사이';
+  const summary = kind ? MATCHUP_KINDS[kind].detail : '맞대결 결과와 돈의 방향이 달라요';
+  const detail = `${matchup.together}판 중 ${a} ${matchup.aAhead}번, ${b} ${matchup.bAhead}번 더 많이 땄고, 합계는 ${a} ${formatManwon(matchup.aSum)} · ${b} ${formatManwon(matchup.bSum)}. ${summary}.`;
+  return { emoji: kind ? MATCHUP_KINDS[kind].emoji : '⚖️', title, detail };
 }
 
 export const VERDICT_MIN_GAMES = 3;

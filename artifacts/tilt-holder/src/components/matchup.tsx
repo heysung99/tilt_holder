@@ -30,6 +30,8 @@ const perGame = (matchup: Matchup) => `판당 ${formatManwon(Math.round(matchup.
 const KIND_TONES = {
   gukbap: 'bg-[#e5f4ea] text-[#16803c]',
   nemesis: 'bg-[#ffe8e4] text-[#c0392b]',
+  bestPartner: 'bg-[#e8edff] text-[#2d3d8f]',
+  worstPartner: 'bg-[#ecebf0] text-[#4b4f63]',
 } as const;
 
 function KindChip({ matchup }: { matchup: Matchup }) {
@@ -42,7 +44,7 @@ function KindChip({ matchup }: { matchup: Matchup }) {
   );
 }
 
-// fallback: nobody is 든든 국밥 (or 천적), so this is just the list's end.
+// fallback: nobody is tagged good (or bad), so this is just the list's end.
 function BestWorstCard({ kind, name, matchup, fallback, onPick }: { kind: 'best' | 'worst'; name: PlayerName; matchup: Matchup; fallback: boolean; onPick: (name: PlayerName) => void }) {
   const best = kind === 'best';
   const title = best ? (fallback ? '🙂 그나마 나은 상대' : '😊 최고의 상성') : (fallback ? '😬 그나마 어려운 상대' : '😈 최악의 상성');
@@ -54,8 +56,8 @@ function BestWorstCard({ kind, name, matchup, fallback, onPick }: { kind: 'best'
       data-testid={`matchup-${kind}`}
     >
       <p className={`text-[11px] font-bold ${best ? 'text-[#16803c]' : 'text-[#c0392b]'}`}>{title}</p>
-      <p className="mt-1 flex items-center gap-1.5">
-        <span className="text-base font-extrabold text-[#20253a]">{name}</span>
+      <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+        <span className="whitespace-nowrap text-base font-extrabold text-[#20253a]">{name}</span>
         <KindChip matchup={matchup} />
       </p>
       <p className="mono mt-0.5 whitespace-nowrap text-[11px] font-bold text-[#596078]">{winRateLabel(matchup)} · {matchup.aAhead}승 {matchup.bAhead}패</p>
@@ -66,8 +68,8 @@ function BestWorstCard({ kind, name, matchup, fallback, onPick }: { kind: 'best'
 }
 
 // Everyone who has shared at least MATCHUP_MIN_GAMES tables with the player, by their
-// per-game money against them (shrunk for few games). Best is the top 든든 국밥 and worst
-// the bottom 천적; with nobody tagged, the ends of the list stand in.
+// per-game money against them (shrunk for few games). Best is the top 든든 국밥 or best
+// partner and worst the bottom 천적 or worst partner; with none, the list's ends stand in.
 export function MatchupPicker({
   playerName,
   users,
@@ -89,21 +91,37 @@ export function MatchupPicker({
     return <p className="mt-6 text-sm text-[#858a9b]">아직 {MATCHUP_MIN_GAMES}판 이상 함께한 사람이 없어요.</p>;
   }
 
-  const gukbap = opponents.find((item) => matchupKind(item.matchup) === 'gukbap');
-  const best = gukbap ?? opponents[0];
-  const nemesis = [...opponents].reverse().find((item) => item !== best && matchupKind(item.matchup) === 'nemesis');
-  const last = opponents[opponents.length - 1];
-  const worst = nemesis ?? (last !== best ? last : undefined);
+  const good = (item: (typeof opponents)[number]) => ['gukbap', 'bestPartner'].includes(matchupKind(item.matchup) ?? '');
+  const bad = (item: (typeof opponents)[number]) => ['nemesis', 'worstPartner'].includes(matchupKind(item.matchup) ?? '');
+  // A stand-in never carries the opposite tag (no 최고의 파트너 under 그나마 어려운 상대).
+  const bestTagged = opponents.find(good);
+  const best = bestTagged ?? opponents.find((item) => !bad(item));
+  const reversed = [...opponents].reverse();
+  const worstTagged = reversed.find((item) => item !== best && bad(item));
+  const worst = worstTagged ?? reversed.find((item) => item !== best && !good(item));
 
   return (
     <div className="mt-4" data-testid="matchup-picker">
-      <div className={`grid gap-2 ${worst ? 'grid-cols-2' : 'grid-cols-1'}`}>
-        <BestWorstCard kind="best" name={best.name} matchup={best.matchup} fallback={!gukbap} onPick={onPick} />
-        {worst ? <BestWorstCard kind="worst" name={worst.name} matchup={worst.matchup} fallback={!nemesis} onPick={onPick} /> : null}
+      <div className={`grid gap-2 ${best && worst ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {best ? <BestWorstCard kind="best" name={best.name} matchup={best.matchup} fallback={!bestTagged} onPick={onPick} /> : null}
+        {worst ? <BestWorstCard kind="worst" name={worst.name} matchup={worst.matchup} fallback={!worstTagged} onPick={onPick} /> : null}
       </div>
       <p className="mt-4 text-xs leading-relaxed text-[#858a9b]">
-        {MATCHUP_MIN_GAMES}판 이상 함께한 상대만, {playerName}의 판당 평균이 높은 순이에요(함께한 판이 적으면 0 쪽으로 보정). 승률 50% 이상에 돈도 따면 <b className="text-[#16803c]">🍲든든 국밥</b>, 승률 50% 미만에 돈도 잃으면 <b className="text-[#c0392b]">😈천적</b>이에요.
+        {MATCHUP_MIN_GAMES}판 이상 함께한 상대만, {playerName}의 판당 평균이 높은 순이에요(함께한 판이 적으면 0 쪽으로 보정).
       </p>
+      <div className="mt-2 grid grid-cols-2 gap-x-1 gap-y-1 text-[10px] tracking-[-0.02em] text-[#697087]">
+        {([
+          ['bestPartner', '둘 다 따요'],
+          ['worstPartner', '둘 다 털려요'],
+          ['gukbap', '나만 따고 이겨요'],
+          ['nemesis', '상대만 따고 져요'],
+        ] as const).map(([kind, text]) => (
+          <p key={kind} className="min-w-0 whitespace-nowrap">
+            <span className={`mr-0.5 rounded px-1 font-extrabold ${KIND_TONES[kind]}`}>{MATCHUP_KINDS[kind].emoji}{MATCHUP_KINDS[kind].label}</span>
+            <span>{text}</span>
+          </p>
+        ))}
+      </div>
       <div className="mt-2 divide-y divide-[#ececf0] rounded-2xl border border-[#ececf0]">
         {opponents.map(({ name, matchup }) => (
           <button
