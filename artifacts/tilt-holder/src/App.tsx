@@ -18,6 +18,7 @@ import { ApiError, api, setAdminPassword } from '@/lib/api';
 import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 import TierBadge from '@/components/tier-badge';
+import StreakChip from '@/components/streak-chip';
 import DailyFortune from '@/components/daily-fortune';
 import MilestonePopup, { markMilestoneSeen, milestoneSeenToday } from '@/components/milestone-popup';
 import HandHistorySection, { type HandGame, HandHistoryModal } from '@/components/hand-history';
@@ -923,6 +924,7 @@ function AppShell() {
             users={users}
             historicalRecords={historicalRecords}
             historyDates={historyDates}
+            gameDetails={gameDetails}
             onCreateSession={requestCreateSession}
             onBuyInChange={updateBuyIn}
             onAddUser={addUser}
@@ -1025,6 +1027,7 @@ function GameScreen({
   users,
   historicalRecords,
   historyDates,
+  gameDetails,
   onCreateSession,
   onBuyInChange,
   onAddUser,
@@ -1046,6 +1049,7 @@ function GameScreen({
   users: Player[];
   historicalRecords: HistoricalRecord[];
   historyDates: string[];
+  gameDetails: Record<string, GameDetail>;
   onCreateSession: (draft: { date: string; participantNames: PlayerName[] }) => void;
   onBuyInChange: (name: PlayerName, delta: number) => void;
   onAddUser: (name: string) => boolean;
@@ -1261,6 +1265,7 @@ function GameScreen({
             users={users}
             historicalRecords={historicalRecords}
             historyDates={historyDates}
+            buyInsByDate={historyDates.map((date) => gameDetails[date]?.buyIns)}
             onClose={() => setSelectedPlayerName(null)}
           />
         ) : null}
@@ -1754,16 +1759,19 @@ function RankingScreen({
                       </span>
                       <div className="flex w-6 justify-center">{rankChange}</div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="tilt-button text-sm font-bold text-[#20253a] hover:underline"
-                        data-testid={`button-player-analysis-${stat.player.name}`}
-                        onClick={() => setSelectedPlayerName(stat.player.name)}
-                      >
-                        {stat.player.name}
-                      </button>
-                      <TierBadge tier={tier} />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="tilt-button text-sm font-bold text-[#20253a] hover:underline"
+                          data-testid={`button-player-analysis-${stat.player.name}`}
+                          onClick={() => setSelectedPlayerName(stat.player.name)}
+                        >
+                          {stat.player.name}
+                        </button>
+                        <TierBadge tier={tier} />
+                      </div>
+                      <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} className="mt-0.5" />
                     </div>
                     <div>
                       <p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p>
@@ -1812,6 +1820,7 @@ function RankingScreen({
             users={users}
             historicalRecords={historicalRecords}
             historyDates={historyDates}
+            buyInsByDate={historyDates.map((date) => gameDetails[date]?.buyIns)}
             onClose={() => setSelectedPlayerName(null)}
           />
         ) : null}
@@ -1845,16 +1854,19 @@ function RankingScreen({
                     <span className="mono flex h-7 w-7 items-center justify-center rounded-full bg-[#f1f1ee] text-xs font-bold text-[#858a9b]">
                       {String(index + 1).padStart(2, '0')}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="tilt-button text-sm font-bold text-[#20253a] hover:underline"
-                        data-testid={`button-player-analysis-${stat.player.name}`}
-                        onClick={() => setSelectedPlayerName(stat.player.name)}
-                      >
-                        {stat.player.name}
-                      </button>
-                      <TierBadge tier={null} />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="tilt-button text-sm font-bold text-[#20253a] hover:underline"
+                          data-testid={`button-player-analysis-${stat.player.name}`}
+                          onClick={() => setSelectedPlayerName(stat.player.name)}
+                        >
+                          {stat.player.name}
+                        </button>
+                        <TierBadge tier={null} />
+                      </div>
+                      <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} className="mt-0.5" />
                     </div>
                     <div>
                       <p className="mono text-sm font-bold tracking-[-0.04em] text-[#20253a]">{stat.net.toFixed(1)}만원</p>

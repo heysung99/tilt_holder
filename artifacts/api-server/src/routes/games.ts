@@ -5,7 +5,7 @@ import { requireAdmin } from "../lib/admin.js";
 import { ensureColumns } from "../lib/columns.js";
 import { MAX_HANDS_PER_GAME, mergeHands, parseHand } from "../lib/hand-history.js";
 import { SESSION_ID } from "./session.js";
-import { computeOverallRanking, settlementPayloads } from "../lib/notifications.js";
+import { computeOverallRanking, settlementNewsPayload, settlementPayloads } from "../lib/notifications.js";
 import { notifyAll, pushPublicKey, senderEndpoint } from "../lib/push.js";
 
 const router: IRouter = Router();
@@ -69,11 +69,13 @@ router.post("/games", requireAdmin, async (req, res) => {
     res.status(201).json(inserted);
 
     if (previousGames) {
+      const gamesAfter = [...previousGames.filter((game) => game.date !== date), { date, results }];
       const rankingBefore = computeOverallRanking(previousGames);
-      const rankingAfter = computeOverallRanking([...previousGames.filter((game) => game.date !== date), { results }]);
+      const rankingAfter = computeOverallRanking(gamesAfter);
       // Games are numbered in date order; this one follows every earlier date.
       const gameNumber = new Set(previousGames.map((game) => game.date).filter((gameDate) => gameDate < date)).size + 1;
-      notifyAll(settlementPayloads(date, results, rankingBefore, rankingAfter, gameNumber), senderEndpoint(req));
+      const news = settlementNewsPayload(date, gamesAfter, rankingBefore, rankingAfter);
+      notifyAll([...settlementPayloads(date, results, rankingBefore, rankingAfter, gameNumber), ...(news ? [news] : [])], senderEndpoint(req));
     }
   } catch (error) {
     console.error("Failed to save game:", error);

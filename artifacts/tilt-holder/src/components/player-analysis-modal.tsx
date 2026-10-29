@@ -30,6 +30,9 @@ import {
 import { shareElementImage, withTemporaryStyles } from '@/lib/share-image';
 import TierBadge from '@/components/tier-badge';
 import { MatchupPicker, MatchupView } from '@/components/matchup';
+import AchievementsSection from '@/components/achievements';
+import StreakChip from '@/components/streak-chip';
+import { computeAchievements } from '@/lib/achievements';
 
 function StatTile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'positive' | 'negative' }) {
   const color = tone === 'positive' ? 'text-[#16a34a]' : tone === 'negative' ? 'text-[#dc2626]' : 'text-[#20253a]';
@@ -47,12 +50,15 @@ export default function PlayerAnalysisModal({
   users,
   historicalRecords,
   historyDates,
+  buyInsByDate,
   onClose,
 }: {
   playerName: PlayerName;
   users: Player[];
   historicalRecords: HistoricalRecord[];
   historyDates?: string[];
+  // Each game's buy-in counts, aligned with historyDates.
+  buyInsByDate?: (Record<string, number> | null | undefined)[];
   onClose: () => void;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -82,6 +88,8 @@ export default function PlayerAnalysisModal({
   const radarData = computeRadarData(playerName, users, historicalRecords);
   const rankInfo = overallRanking(users, historicalRecords).get(playerName);
   const verdict = playerVerdict(playerName, users, historicalRecords);
+  const achievements = computeAchievements(playerName, users, historicalRecords, historyDates ?? [], buyInsByDate ?? []);
+  const playerValues = historicalRecords.find((record) => record.name === playerName)?.values ?? [];
   const trendData = stats.history.map((value, index) => ({ game: `${index + 1}`, value }));
   const trendColor = stats.net >= 0 ? '#16a34a' : '#dc2626';
   let runningTotal = 0;
@@ -100,6 +108,7 @@ export default function PlayerAnalysisModal({
               {rankInfo ? (
                 <TierBadge tier={rankInfo.tier} />
               ) : null}
+              <StreakChip values={playerValues} />
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
@@ -159,6 +168,8 @@ export default function PlayerAnalysisModal({
             >
               <Swords size={14} /> 상성 확인하기
             </button>
+
+            <AchievementsSection achievements={achievements} historyDates={historyDates} />
 
             {radarData ? (
               <div className="mt-6">
