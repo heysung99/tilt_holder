@@ -229,3 +229,77 @@ export function matchupVerdict(a: PlayerName, b: PlayerName, matchup: Matchup) {
   else if (matchup.aAvgWith < 0 && matchup.bAvgWith < 0) detail += ' 같이 치면 둘 다 털리는 사이 💸';
   return { ...verdict, detail };
 }
+
+export const VERDICT_MIN_GAMES = 3;
+const RECENT_WINDOW = 5;
+
+const mean = (values: number[]) => (values.length ? values.reduce((sum, val) => sum + val, 0) / values.length : 0);
+const percent = (rate: number) => `${Math.round(rate * 100)}%`;
+
+// A blunt, numbers-first read on a player's record: an archetype headline from how they
+// win and lose, then what the recent games say about where it's heading.
+export function playerVerdict(name: PlayerName, users: Player[], historicalRecords: HistoricalRecord[]) {
+  const stats = computePlayerStats(name, historicalRecords);
+  const { played, winRate, net, avg, best, history } = stats;
+  if (played < VERDICT_MIN_GAMES) {
+    return {
+      emoji: '🧪',
+      title: '판단 보류',
+      lines: [`${played}판은 표본이 아닙니다. 지금의 ${formatManwon(net)}은 실력보다 카드가 만든 숫자예요.`],
+    };
+  }
+
+  const winsOnly = history.filter((val) => val > 0);
+  const lossesOnly = history.filter((val) => val <= 0);
+  const avgWin = mean(winsOnly);
+  const avgLoss = mean(lossesOnly);
+  const netWithoutBest = net - best;
+
+  // Where the player's per-game average sits among everyone with a real sample.
+  const pool = users
+    .map((user) => computePlayerStats(user.name, historicalRecords))
+    .filter((item) => item.played >= VERDICT_MIN_GAMES)
+    .map((item) => item.avg)
+    .sort((a, b) => b - a);
+  const avgRank = pool.indexOf(avg) + 1;
+  const topCut = Math.max(1, Math.ceil(pool.length * 0.2));
+  const bottomCut = pool.length - topCut + 1;
+  const sizes = `이긴 판 평균 ${formatManwon(avgWin)}, 진 판 평균 ${formatManwon(avgLoss)}`;
+  const swing = mean(history.map((val) => Math.abs(val)));
+
+  let verdict: { emoji: string; title: string; line: string };
+  if (net > 0 && netWithoutBest <= 0 && played >= 5) {
+    verdict = { emoji: '🎰', title: '한 판이 먹여 살리는 흑자', line: `누적 ${formatManwon(net)} 중 최고 한 판이 ${formatManwon(best)}. 그 판을 빼면 ${formatManwon(netWithoutBest)} — 실력이라 부르기엔 한 방 의존도가 너무 높습니다.` };
+  } else if (Math.abs(avg) <= Math.max(0.5, swing * 0.25)) {
+    verdict = { emoji: '🧱', title: '제자리걸음', line: `${played}판 누적 ${formatManwon(net)}, 판당 ${formatManwon(avg)}. ${sizes} — 오르내려도 결국 제자리, 테이블에 시간만 쓰고 있습니다.` };
+  } else if (net > 0 && avgRank > 0 && avgRank <= topCut && pool.length >= 3) {
+    verdict = { emoji: '🦈', title: '테이블의 포식자', line: winRate >= 0.5
+      ? `${played}판 승률 ${percent(winRate)}, 판당 ${formatManwon(avg)}으로 평균 수익 ${avgRank}위. 이 표본이면 운이 아니라 실력입니다.`
+      : `승률 ${percent(winRate)}로도 판당 ${formatManwon(avg)}, 평균 수익 ${avgRank}위. ${sizes} — 지는 판을 작게 끊을 줄 압니다.` };
+  } else if (net > 0 && winRate >= 0.5) {
+    verdict = avgWin >= -avgLoss
+      ? { emoji: '📈', title: '구조가 탄탄한 흑자', line: `${sizes}. 자주 이기고, 이길 때 더 가져갑니다. 약점이 숫자에 안 보입니다.` }
+      : { emoji: '⚖️', title: '승률로 버티는 흑자', line: `${sizes}. 질 때 더 크게 잃는데 자주 이겨서 메우는 구조라, 승률이 꺾이면 바로 적자입니다.` };
+  } else if (net > 0) {
+    verdict = { emoji: '🎯', title: '적게 이기고 크게 먹는다', line: `승률 ${percent(winRate)}로 지는 판이 더 많지만 ${sizes}. 손익비 하나로 먹고사는 스타일입니다.` };
+  } else if (winRate >= 0.5) {
+    verdict = { emoji: '🩸', title: '자주 이기고 크게 진다', line: `승률 ${percent(winRate)}인데 누적 ${formatManwon(net)}. ${sizes} — 문제는 승률이 아니라 손절입니다.` };
+  } else if (avgRank >= bottomCut && pool.length >= 3) {
+    verdict = { emoji: '💸', title: '테이블의 기부천사', line: `${played}판 누적 ${formatManwon(net)}, 판당 ${formatManwon(avg)}으로 평균 수익 꼴찌권. 이 테이블의 수익 상당 부분이 여기서 나옵니다.` };
+  } else {
+    verdict = { emoji: '📉', title: '구조적인 적자', line: avgWin >= -avgLoss
+      ? `승률 ${percent(winRate)}, ${sizes}. 이길 때 크기는 충분한데 너무 자주 집니다 — 들어가는 판부터 줄여야 합니다.`
+      : `승률 ${percent(winRate)}, ${sizes}. 이기는 횟수도 크기도 모자랍니다.` };
+  }
+
+  const lines = [verdict.line];
+  if (played >= RECENT_WINDOW + 1) {
+    const recentAvg = mean(history.slice(-RECENT_WINDOW));
+    const diff = recentAvg - avg;
+    const threshold = Math.max(1, stats.stdDev * 0.35);
+    if (diff >= threshold) lines.push(`최근 ${RECENT_WINDOW}판 평균 ${formatManwon(recentAvg)}, 평소보다 ${Math.abs(diff).toFixed(1)}만원 좋습니다. 상승세는 맞지만 아직 ${RECENT_WINDOW}판짜리 상승세입니다.`);
+    else if (diff <= -threshold) lines.push(`최근 ${RECENT_WINDOW}판 평균 ${formatManwon(recentAvg)}, 평소보다 ${Math.abs(diff).toFixed(1)}만원 나쁩니다. 틸트 경보.`);
+    else lines.push(`최근 ${RECENT_WINDOW}판 평균 ${formatManwon(recentAvg)} — 평소 흐름 그대로, 바뀐 건 없습니다.`);
+  }
+  return { emoji: verdict.emoji, title: verdict.title, lines };
+}

@@ -25,6 +25,7 @@ import {
   computeRadarData,
   formatManwon,
   overallRanking,
+  playerVerdict,
 } from '@/lib/player-stats';
 import { shareElementImage, withTemporaryStyles } from '@/lib/share-image';
 import TierBadge from '@/components/tier-badge';
@@ -80,6 +81,7 @@ export default function PlayerAnalysisModal({
   const stats = computePlayerStats(playerName, historicalRecords);
   const radarData = computeRadarData(playerName, users, historicalRecords);
   const rankInfo = overallRanking(users, historicalRecords).get(playerName);
+  const verdict = playerVerdict(playerName, users, historicalRecords);
   const trendData = stats.history.map((value, index) => ({ game: `${index + 1}`, value }));
   const trendColor = stats.net >= 0 ? '#16a34a' : '#dc2626';
   let runningTotal = 0;
@@ -131,7 +133,15 @@ export default function PlayerAnalysisModal({
           <p className="mt-6 text-sm text-[#858a9b]">아직 참여한 게임이 없습니다.</p>
         ) : (
           <>
-            <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="mt-4 rounded-2xl bg-[#20253a] px-4 py-3.5 text-white" data-testid="card-player-verdict">
+              <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#8f96b8]">cold read · 냉정한 분석</p>
+              <p className="mt-1.5 text-base font-extrabold tracking-[-0.03em]" data-testid="text-player-verdict">{verdict.emoji} {verdict.title}</p>
+              {verdict.lines.map((line) => (
+                <p key={line} className="mt-1.5 break-keep text-xs leading-relaxed text-[#cbd1f2]">{line}</p>
+              ))}
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2">
               <StatTile label="총 순손익" value={formatManwon(stats.net)} tone={stats.net >= 0 ? 'positive' : 'negative'} />
               <StatTile label="참여 횟수" value={`${stats.played}회`} />
               <StatTile label="승률" value={`${Math.round(stats.winRate * 100)}%`} sub={`${stats.wins}승 ${stats.losses}패`} />
