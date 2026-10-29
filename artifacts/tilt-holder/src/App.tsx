@@ -21,6 +21,7 @@ import TierBadge from '@/components/tier-badge';
 import StreakChip from '@/components/streak-chip';
 import DailyFortune from '@/components/daily-fortune';
 import MilestonePopup, { markMilestoneSeen, milestoneSeenToday } from '@/components/milestone-popup';
+import BuyInOverheatModal, { type OverheatWarning, overheatWarning } from '@/components/buy-in-overheat';
 import HandHistorySection, { type HandGame, HandHistoryModal } from '@/components/hand-history';
 import { type HandHistory, renameInHand } from '@/lib/hand-history';
 
@@ -293,6 +294,8 @@ function AppShell() {
   // Once per app open, after the setup guide (if any) is out of the way, the game tab
   // invites anyone who hasn't drawn today's fortune yet.
   const [fortunePromptPending, setFortunePromptPending] = useState(true);
+  // Shown on the phone that adds a rebuy within 30 minutes of the player's last one.
+  const [overheat, setOverheat] = useState<OverheatWarning | null>(null);
   // A 50th (100th, 150th, …) game announcement comes between the setup guide and the fortune.
   const [milestone, setMilestone] = useState<{ number: number; live: boolean } | null>(null);
   const [milestoneResolved, setMilestoneResolved] = useState(false);
@@ -591,7 +594,11 @@ function AppShell() {
         [name]: (current.buyIns[name] ?? 0) + delta,
       },
     }));
-    setBuyInLog((current) => [...current, { time: new Date().toISOString(), name, delta, after }]);
+    const entry = { time: new Date().toISOString(), name, delta, after };
+    // Just a heads-up for a rebuy within 30 minutes of the last one; the buy-in still counts.
+    const warning = overheatWarning(buyInLog, entry);
+    if (warning) setOverheat(warning);
+    setBuyInLog((current) => [...current, entry]);
   };
 
   const addParticipantToSession = (name: PlayerName) => {
@@ -996,6 +1003,7 @@ function AppShell() {
           }}
         />
       ) : null}
+      {overheat ? <BuyInOverheatModal warning={overheat} onClose={() => setOverheat(null)} /> : null}
       {milestone ? <MilestonePopup number={milestone.number} live={milestone.live} onClose={() => { setMilestone(null); setMilestoneResolved(true); }} /> : null}
       {guideTargets.length > 0 ? (
         <CoachMarks
