@@ -71,7 +71,9 @@ router.post("/games", requireAdmin, async (req, res) => {
     if (previousGames) {
       const rankingBefore = computeOverallRanking(previousGames);
       const rankingAfter = computeOverallRanking([...previousGames.filter((game) => game.date !== date), { results }]);
-      notifyAll(settlementPayloads(date, results, rankingBefore, rankingAfter), senderEndpoint(req));
+      // Games are numbered in date order; this one follows every earlier date.
+      const gameNumber = new Set(previousGames.map((game) => game.date).filter((gameDate) => gameDate < date)).size + 1;
+      notifyAll(settlementPayloads(date, results, rankingBefore, rankingAfter, gameNumber), senderEndpoint(req));
     }
   } catch (error) {
     console.error("Failed to save game:", error);

@@ -63,6 +63,7 @@ export function settlementPayloads(
   results: Record<string, number>,
   rankingBefore: RankEntry[],
   rankingAfter: RankEntry[],
+  gameNumber?: number,
 ): PushPayload[] {
   const [winnerName, winnerNet] = Object.entries(results).sort(([, a], [, b]) => b - a)[0] ?? [];
 
@@ -80,7 +81,7 @@ export function settlementPayloads(
   if (rankChanges.length) lines.push(listWithOverflow(rankChanges));
 
   const payloads: PushPayload[] = [
-    { title: `🏁 정산 완료 · ${formatDate(date)}`, body: lines.join("\n"), tag: `settled-${date}` },
+    { title: `🏁 ${gameNumber ? `제${gameNumber}회 ` : ""}정산 완료 · ${formatDate(date)}`, body: lines.join("\n"), tag: `settled-${date}` },
   ];
 
   const oldLeader = rankingBefore[0]?.name;

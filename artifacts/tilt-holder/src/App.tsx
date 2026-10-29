@@ -19,6 +19,7 @@ import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 import TierBadge from '@/components/tier-badge';
 import DailyFortune from '@/components/daily-fortune';
+import MilestonePopup, { markMilestoneSeen, milestoneSeenToday } from '@/components/milestone-popup';
 import HandHistorySection, { type HandGame, HandHistoryModal } from '@/components/hand-history';
 import { type HandHistory, renameInHand } from '@/lib/hand-history';
 
@@ -291,7 +292,11 @@ function AppShell() {
   // Once per app open, after the setup guide (if any) is out of the way, the game tab
   // invites anyone who hasn't drawn today's fortune yet.
   const [fortunePromptPending, setFortunePromptPending] = useState(true);
-  const autoPromptFortune = fortunePromptPending && guideResolved && !showGuide && activeTab === 'game';
+  // A 100th (200th, …) game announcement comes between the setup guide and the fortune.
+  const [milestone, setMilestone] = useState<{ number: number; live: boolean } | null>(null);
+  const [milestoneResolved, setMilestoneResolved] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const autoPromptFortune = fortunePromptPending && guideResolved && !showGuide && milestoneResolved && activeTab === 'game';
 
   const isGuided = (testId: string) => guideTargets.some((target) => target.testId === testId);
   const guidedClass = 'relative z-[60] ring-4 ring-white/90';
@@ -432,6 +437,7 @@ function AppShell() {
       setHistoryDates(dates);
       setHistoricalRecords(records);
       setGameDetails(details);
+      setDataLoaded(true);
     } catch (err) {
       console.error('Failed to fetch from central DB:', err);
     }
@@ -768,6 +774,11 @@ function AppShell() {
     gameSaved.then(() => api('/api/session', { method: 'DELETE', admin: true })).catch(handleSyncError);
   };
 
+  // Games are numbered in date order across everything settled; the game in progress
+  // takes the number after every earlier date (its own date replaces any same-day result).
+  const gameNumberFor = (date: string) => historyDates.filter((item) => item < date).length + 1;
+  const liveGameNumber = gameNumberFor(session.date);
+
   // Hands can go to the game in progress or to any settled date; a settled date's
   // hands live with its game result.
   const isSessionLive = session.participantNames.length > 0 && !session.fundApplied;
@@ -784,6 +795,17 @@ function AppShell() {
       hands: gameDetails[date]?.handHistories ?? [],
     })).reverse(),
   ];
+
+  useEffect(() => {
+    if (milestoneResolved || !dataLoaded || !guideResolved || showGuide) return;
+    const number = isSessionLive ? liveGameNumber : historyDates.length + 1;
+    if (number % 100 === 0 && !milestoneSeenToday(number)) {
+      markMilestoneSeen(number);
+      setMilestone({ number, live: isSessionLive });
+    } else {
+      setMilestoneResolved(true);
+    }
+  }, [milestoneResolved, dataLoaded, guideResolved, showGuide, isSessionLive, liveGameNumber, historyDates.length]);
 
   const updateGameHands = (date: string, change: (hands: HandHistory[]) => HandHistory[]) => {
     setGameDetails((current) => {
@@ -921,6 +943,7 @@ function AppShell() {
         )}
         {activeTab === 'settle' && (
           <SettleScreen
+            gameNumber={liveGameNumber}
             session={session}
             expenses={expenses}
             settlementRows={settlementRows}
@@ -960,6 +983,7 @@ function AppShell() {
       </main>
       {showSettlementModal ? (
         <SettlementSummaryModal
+          gameNumber={gameNumberFor(session.date)}
           session={session}
           settlementRows={settlementRows}
           expenses={expenses}
@@ -970,6 +994,7 @@ function AppShell() {
           }}
         />
       ) : null}
+      {milestone ? <MilestonePopup number={milestone.number} live={milestone.live} onClose={() => { setMilestone(null); setMilestoneResolved(true); }} /> : null}
       {guideTargets.length > 0 ? (
         <CoachMarks
           targets={guideTargets}
@@ -1360,6 +1385,7 @@ function NewSessionForm({
 }
 
 function SettleScreen({
+  gameNumber,
   session,
   expenses,
   settlementRows,
@@ -1383,6 +1409,7 @@ function SettleScreen({
   totalBuyIns: number;
   totalFinalChips: number;
   onFinalAmountChange: (name: PlayerName, value: number) => void;
+  gameNumber: number;
   onSaveFinalAmounts: () => Promise<void>;
   finalAmountsDirty: boolean;
   finalAmountsSavedAt: string | null;
@@ -1408,7 +1435,7 @@ function SettleScreen({
   return (
     <div>
       <div className="rise-in delay-2 mt-1">
-        <div className="mb-3 flex items-center justify-between"><div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">payout calculator</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">플레이어별 정산</h3></div><span className="text-xs text-[#858a9b]">최종 금액 입력</span></div>
+        <div className="mb-3 flex items-center justify-between"><div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">payout calculator</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">플레이어별 정산</h3></div>{session.participantNames.length > 0 ? <span className="rounded-full bg-[#eef0ff] px-2.5 py-1 text-xs font-bold text-[#2d3d8f]" data-testid="text-settle-game-number">제{gameNumber}회 게임</span> : <span className="text-xs text-[#858a9b]">최종 금액 입력</span>}</div>
         <div className="tilt-card divide-y divide-[#ececf0]">
           {settlementRows.map((row) => (
             <div key={row.name} className="p-4" data-testid={`row-settlement-${row.name}`}>
@@ -1870,7 +1897,7 @@ function RankingScreen({
                 {shownDate ? formatDateWithWeekday(shownDate) : '기록 없음'}
                 <ChevronDown size={14} className="text-[#a0a4b1]" />
               </p>
-              {shownDate ? <p className="mt-0.5 text-[11px] text-[#858a9b]">{selectedDateIndex + 1}번째 게임 · {dateResults.length}명 참가</p> : null}
+              {shownDate ? <p className="mt-0.5 text-[11px] text-[#858a9b]">제{selectedDateIndex + 1}회 게임 · {dateResults.length}명 참가</p> : null}
               <label className="sr-only" htmlFor="ranking-date-select">전적 날짜 선택</label>
               <select id="ranking-date-select" value={shownDate} onChange={(event) => setSelectedDate(event.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" data-testid="select-ranking-date">
                 {historyDates.slice().reverse().map((date) => <option key={date} value={date}>{formatDateWithWeekday(date)}</option>)}
@@ -2036,12 +2063,14 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
 }
 
 function SettlementSummaryModal({
+  gameNumber,
   session,
   settlementRows,
   expenses,
   grossFundContribution,
   onClose,
 }: {
+  gameNumber: number;
   session: SessionState;
   settlementRows: SettlementRow[];
   expenses: ExpenseEntry[];
@@ -2052,7 +2081,7 @@ function SettlementSummaryModal({
   const finalTotal = grossFundContribution - expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
   const handleDownload = () => {
-    downloadSettlementImage(session, settlementRows, expenses, grossFundContribution);
+    downloadSettlementImage(session, settlementRows, expenses, grossFundContribution, gameNumber);
   };
 
   return (
@@ -2062,6 +2091,7 @@ function SettlementSummaryModal({
           <div>
             <span className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">settlement summary</span>
             <h3 className="mt-1 text-xl font-bold text-[#20253a]">정산 결과 요약</h3>
+            <p className="mt-1 text-sm font-bold text-[#2d3d8f]" data-testid="text-summary-game-number">제{gameNumber}회 게임 · {session.date}</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full bg-[#f1f1ee] px-3 py-1 text-xs font-bold text-[#697087]">닫기</button>
         </div>
@@ -2147,7 +2177,7 @@ function SettlementSummaryModal({
   );
 }
 
-function downloadSettlementImage(session: SessionState, settlementRows: SettlementRow[], expenses: ExpenseEntry[], grossFundContribution: number) {
+function downloadSettlementImage(session: SessionState, settlementRows: SettlementRow[], expenses: ExpenseEntry[], grossFundContribution: number, gameNumber: number) {
   const sortedRows = [...settlementRows].sort((a, b) => b.result - a.result);
   const hasContribution = grossFundContribution > 0;
   const expenseRowCount = (hasContribution ? 1 : 0) + expenses.length;
@@ -2177,7 +2207,7 @@ function downloadSettlementImage(session: SessionState, settlementRows: Settleme
   // Title
   ctx.fillStyle = '#ffffff';
   ctx.font = 'bold 34px sans-serif';
-  ctx.fillText('TILT HOLDER - 정산 결과', 40, 58);
+  ctx.fillText(`TILT HOLDER - 제${gameNumber}회 정산 결과`, 40, 58);
 
   ctx.fillStyle = '#e9ef76';
   ctx.font = 'bold 19px sans-serif';

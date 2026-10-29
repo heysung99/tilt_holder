@@ -13,7 +13,7 @@ import {
 const RECENT_GAMES = 5;
 
 function formatGameDate(date: string | undefined, index: number) {
-  if (!date) return `${index + 1}번째 게임`;
+  if (!date) return `제${index + 1}회`;
   const [year, month, day] = date.split('-');
   return `${year.slice(2)}.${month}.${day}`;
 }
