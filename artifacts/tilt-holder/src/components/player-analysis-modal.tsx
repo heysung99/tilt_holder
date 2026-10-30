@@ -32,7 +32,7 @@ import TierBadge from '@/components/tier-badge';
 import { MatchupPicker, MatchupView } from '@/components/matchup';
 import AchievementsSection from '@/components/achievements';
 import StreakChip from '@/components/streak-chip';
-import ChampionStars from '@/components/champion-stars';
+import ChampionRings from '@/components/champion-rings';
 import { computeAchievements } from '@/lib/achievements';
 
 function StatTile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'positive' | 'negative' }) {
@@ -106,7 +106,7 @@ export default function PlayerAnalysisModal({
           {view === 'stats' ? (
             <div className="flex items-center gap-2">
               <h3 className="text-lg font-bold text-[#20253a]">{playerName}</h3>
-              <ChampionStars name={playerName} className="-ml-1 text-sm" />
+              <ChampionRings name={playerName} className="-ml-1 text-sm" />
               {rankInfo ? (
                 <TierBadge tier={rankInfo.tier} />
               ) : null}

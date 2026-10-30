@@ -19,7 +19,7 @@ import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 import TierBadge from '@/components/tier-badge';
 import StreakChip from '@/components/streak-chip';
-import ChampionStars from '@/components/champion-stars';
+import ChampionRings from '@/components/champion-rings';
 import { ChampionsContext, type SeasonChampion, seasonChampions } from '@/lib/champions';
 import DailyFortune from '@/components/daily-fortune';
 import MilestonePopup, { markMilestoneSeen, milestoneSeenToday } from '@/components/milestone-popup';
@@ -1196,7 +1196,7 @@ function GameScreen({
                     >
                       {player.name}
                     </button>
-                    <ChampionStars name={player.name} />
+                    <ChampionRings name={player.name} />
                     {ranked ? (
                       <TierBadge tier={ranked.tier} />
                     ) : null}
@@ -1604,7 +1604,7 @@ function SeasonChampionBanner({ season, champions, leader }: { season: string; c
           <p className="mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#8a6100]">{season} season champion</p>
           <p className="mt-0.5 flex items-center gap-1 text-xl font-extrabold tracking-[-0.04em] text-[#4a3500]">
             {champion.name}
-            <ChampionStars name={champion.name} className="text-sm" />
+            <ChampionRings name={champion.name} className="text-sm" />
           </p>
           <p className="mono text-[11px] font-bold text-[#8a6100]">
             {formatManwon(Math.round(champion.net * 10) / 10)} · {champion.wins}승 {champion.played - champion.wins}패
@@ -1836,7 +1836,7 @@ function RankingScreen({
                       >
                         {stat.player.name}
                       </button>
-                      <ChampionStars name={stat.player.name} className="-ml-0.5 mr-0.5" />
+                      <ChampionRings name={stat.player.name} className="-ml-0.5 mr-0.5" />
                       <TierBadge tier={tier} label={shortTierLabel(tier)} />
                       <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} />
                     </div>
@@ -1930,7 +1930,7 @@ function RankingScreen({
                       >
                         {stat.player.name}
                       </button>
-                      <ChampionStars name={stat.player.name} className="-ml-0.5 mr-0.5" />
+                      <ChampionRings name={stat.player.name} className="-ml-0.5 mr-0.5" />
                       <TierBadge tier={null} />
                       <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} />
                     </div>
@@ -2002,7 +2002,7 @@ function RankingScreen({
               const buyInCount = shownDetail?.buyIns?.[player.name];
               return (
                 <div key={player.name} className="col-span-full grid grid-cols-subgrid items-center px-4 py-3.5 max-[379px]:px-3" data-testid={`row-date-result-${player.name}`}>
-                  <span className="flex items-center gap-0.5 whitespace-nowrap pr-3 text-sm font-bold text-[#20253a] max-[379px]:pr-2">{player.name}<ChampionStars name={player.name} /></span>
+                  <span className="flex items-center gap-0.5 whitespace-nowrap pr-3 text-sm font-bold text-[#20253a] max-[379px]:pr-2">{player.name}<ChampionRings name={player.name} /></span>
                   <TierBadge tier={tierShift === 0 ? after : before} label={shortTierLabel(tierShift === 0 ? after : before)} className="justify-self-start" />
                   <span className="flex justify-center px-2 max-[379px]:px-1" data-testid={`tier-change-${player.name}`}>
                     <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-full ${tierShift > 0 ? 'bg-[#e7f6ec] text-[#16a34a]' : tierShift < 0 ? 'bg-[#fdeceb] text-[#dc2626]' : 'bg-[#f1f2f5] text-[#a8adba]'}`}>
