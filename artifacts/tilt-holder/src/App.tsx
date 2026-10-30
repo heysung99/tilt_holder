@@ -1631,7 +1631,10 @@ function RankingScreen({
   onVerifyPassword: (title: string, onSuccess: () => void) => void;
 }) {
   const availableYears = Array.from(new Set(historyDates.map((date) => date.split('-')[0]))).sort().reverse();
-  const [selectedSeason, setSelectedSeason] = useState<string>('ALL');
+  // Opens on the running season (or the latest one with games) until a tab is picked.
+  const [chosenSeason, setSelectedSeason] = useState<string | null>(null);
+  const currentYear = String(new Date().getFullYear());
+  const selectedSeason = chosenSeason ?? (availableYears.includes(currentYear) ? currentYear : availableYears[0] ?? 'ALL');
   const [selectedDate, setSelectedDate] = useState(historyDates[historyDates.length - 1] ?? '');
   const [isAdmin, setIsAdmin] = useState(false);
   const [showTierTable, setShowTierTable] = useState(false);
@@ -1740,15 +1743,6 @@ function RankingScreen({
       {/* Season Filter Selector */}
       <div className="rise-in mb-4 flex items-center rounded-2xl border border-[#dfe1ee] bg-white p-2">
         <div className="flex gap-1 overflow-x-auto py-1">
-          <button
-            type="button"
-            onClick={() => setSelectedSeason('ALL')}
-            className={`tilt-button rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${
-              selectedSeason === 'ALL' ? 'bg-[#2d3d8f] text-white' : 'bg-[#f1f1ee] text-[#697087] hover:bg-[#e4e5ea]'
-            }`}
-          >
-            전체
-          </button>
           {availableYears.map((year) => (
             <button
               key={year}
@@ -1761,6 +1755,15 @@ function RankingScreen({
               {year.slice(-2)}시즌
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setSelectedSeason('ALL')}
+            className={`tilt-button rounded-xl px-3 py-1.5 text-xs font-bold transition-colors ${
+              selectedSeason === 'ALL' ? 'bg-[#2d3d8f] text-white' : 'bg-[#f1f1ee] text-[#697087] hover:bg-[#e4e5ea]'
+            }`}
+          >
+            전체
+          </button>
         </div>
       </div>
 
