@@ -1,4 +1,4 @@
-import { type ReactNode, Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { type ReactNode, Suspense, lazy, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -19,6 +19,8 @@ import { usePushNotifications } from '@/lib/use-push-notifications';
 import CoachMarks from '@/components/coach-marks';
 import TierBadge from '@/components/tier-badge';
 import StreakChip from '@/components/streak-chip';
+import ChampionStars from '@/components/champion-stars';
+import { ChampionsContext, type SeasonChampion, seasonChampions } from '@/lib/champions';
 import DailyFortune from '@/components/daily-fortune';
 import MilestonePopup, { markMilestoneSeen, milestoneSeenToday } from '@/components/milestone-popup';
 import BuyInOverheatModal, { type OverheatWarning, overheatWarning } from '@/components/buy-in-overheat';
@@ -784,6 +786,8 @@ function AppShell() {
 
   // Games are numbered in date order across everything settled; the game in progress
   // takes the number after every earlier date (its own date replaces any same-day result).
+  // Winners of finished seasons; the running year's title stays open until it ends.
+  const champions = useMemo(() => seasonChampions(users, historicalRecords, historyDates), [users, historicalRecords, historyDates]);
   const gameNumberFor = (date: string) => historyDates.filter((item) => item < date).length + 1;
   const liveGameNumber = gameNumberFor(session.date);
 
@@ -873,150 +877,152 @@ function AppShell() {
   };
 
   return (
-    <div className="tilt-shell">
-      <main className={`tilt-container pb-[480px] pt-6 sm:pt-9 ${hasEntered ? '' : 'page-enter'}`}>
-        <header className="mb-8 flex items-center justify-between gap-3">
-          <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={handleRefreshClick}
-              className={`${headerIconButton} ${headerIconIdle}`}
-              data-testid="button-refresh"
-              aria-label="새로고침"
-            >
-              <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-            </button>
-            {push.state === 'loading' || push.state === 'unsupported' ? null : (
+    <ChampionsContext.Provider value={champions}>
+      <div className="tilt-shell">
+        <main className={`tilt-container pb-[480px] pt-6 sm:pt-9 ${hasEntered ? '' : 'page-enter'}`}>
+          <header className="mb-8 flex items-center justify-between gap-3">
+            <h1 className="text-[32px] font-bold tracking-[-0.07em] text-[#20253a]">TILT HOLDER</h1>
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                onClick={push.toggle}
-                disabled={push.isBusy}
-                className={`${headerIconButton} disabled:opacity-50 ${isGuided('button-push-toggle') ? guidedClass : ''} ${
-                  push.state === 'on' ? 'border-[#2d3d8f] bg-[#2d3d8f] text-white hover:bg-[#202e74]' : headerIconIdle
-                }`}
-                data-testid="button-push-toggle"
-                data-state={push.state}
-                aria-label={push.state === 'on' ? '알림 끄기' : '알림 켜기'}
+                onClick={handleRefreshClick}
+                className={`${headerIconButton} ${headerIconIdle}`}
+                data-testid="button-refresh"
+                aria-label="새로고침"
               >
-                {push.state === 'on' ? <BellRing size={16} /> : push.state === 'denied' ? <BellOff size={16} /> : <Bell size={16} />}
+                <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
               </button>
-            )}
-            {isInstalled ? null : (
+              {push.state === 'loading' || push.state === 'unsupported' ? null : (
+                <button
+                  type="button"
+                  onClick={push.toggle}
+                  disabled={push.isBusy}
+                  className={`${headerIconButton} disabled:opacity-50 ${isGuided('button-push-toggle') ? guidedClass : ''} ${
+                    push.state === 'on' ? 'border-[#2d3d8f] bg-[#2d3d8f] text-white hover:bg-[#202e74]' : headerIconIdle
+                  }`}
+                  data-testid="button-push-toggle"
+                  data-state={push.state}
+                  aria-label={push.state === 'on' ? '알림 끄기' : '알림 켜기'}
+                >
+                  {push.state === 'on' ? <BellRing size={16} /> : push.state === 'denied' ? <BellOff size={16} /> : <Bell size={16} />}
+                </button>
+              )}
+              {isInstalled ? null : (
+                <button
+                  type="button"
+                  onClick={handleInstallClick}
+                  className={`${headerIconButton} ${headerIconIdle} ${isGuided('button-install-shortcut') ? guidedClass : ''}`}
+                  data-testid="button-install-shortcut"
+                  aria-label="바로가기 저장"
+                >
+                  <Download size={16} />
+                </button>
+              )}
               <button
                 type="button"
-                onClick={handleInstallClick}
-                className={`${headerIconButton} ${headerIconIdle} ${isGuided('button-install-shortcut') ? guidedClass : ''}`}
-                data-testid="button-install-shortcut"
-                aria-label="바로가기 저장"
+                onClick={handleShareApp}
+                className={`${headerIconButton} ${headerIconIdle}`}
+                data-testid="button-share-app"
+                aria-label="앱 링크 공유"
               >
-                <Download size={16} />
+                <Share2 size={16} />
               </button>
-            )}
-            <button
-              type="button"
-              onClick={handleShareApp}
-              className={`${headerIconButton} ${headerIconIdle}`}
-              data-testid="button-share-app"
-              aria-label="앱 링크 공유"
-            >
-              <Share2 size={16} />
-            </button>
-          </div>
-        </header>
+            </div>
+          </header>
 
-        {activeTab === 'game' && (
-          <GameScreen
+          {activeTab === 'game' && (
+            <GameScreen
+              session={session}
+              users={users}
+              historicalRecords={historicalRecords}
+              historyDates={historyDates}
+              gameDetails={gameDetails}
+              onCreateSession={requestCreateSession}
+              onBuyInChange={updateBuyIn}
+              onAddUser={addUser}
+              onRenameUser={renameUser}
+              onAddParticipant={addParticipantToSession}
+              isEditingBuyIns={isEditingBuyIns}
+              buyInArrows={buyInArrows}
+              buyInLog={buyInLog}
+              handGames={handGames}
+              onRecordHand={recordHand}
+              onDeleteHand={deleteHand}
+              onStartEditBuyIns={startEditingBuyIns}
+              onFinishEditBuyIns={finishEditingBuyIns}
+              onVerifyPassword={verifyPassword}
+              autoPromptFortune={autoPromptFortune}
+              onFortunePromptHandled={() => setFortunePromptPending(false)}
+            />
+          )}
+          {activeTab === 'settle' && (
+            <SettleScreen
+              gameNumber={liveGameNumber}
+              session={session}
+              expenses={expenses}
+              settlementRows={settlementRows}
+              finalFundAmount={finalFundAmount}
+              totalPayout={totalPayout}
+              totalBuyIns={totalBuyIns}
+              totalFinalChips={totalFinalChips}
+              onFinalAmountChange={updateFinalAmount}
+              onSaveFinalAmounts={saveFinalAmounts}
+              finalAmountsDirty={finalAmountsDirty}
+              finalAmountsSavedAt={finalAmountsSavedAt}
+              onAddExpense={addExpense}
+              onFinishSession={requestCompleteSettlement}
+              onSyncError={handleSyncError}
+            />
+          )}
+          {activeTab === 'ranking' && (
+            <RankingScreen
+              users={users}
+              historyDates={historyDates}
+              historicalRecords={historicalRecords}
+              gameDetails={gameDetails}
+              onDeleteHistoryDate={deleteHistoryDate}
+              onVerifyPassword={verifyPassword}
+            />
+          )}
+          {activeTab === 'fund' && (
+            <FundScreen
+              fundEntries={fundEntries}
+              fundBalance={fundBalance}
+              onAddDeposit={addFundDeposit}
+              onDeleteFundEntry={deleteFundEntry}
+              onVerifyPassword={verifyPassword}
+            />
+          )}
+          <div className="h-64" />
+        </main>
+        {showSettlementModal ? (
+          <SettlementSummaryModal
+            gameNumber={gameNumberFor(session.date)}
             session={session}
-            users={users}
-            historicalRecords={historicalRecords}
-            historyDates={historyDates}
-            gameDetails={gameDetails}
-            onCreateSession={requestCreateSession}
-            onBuyInChange={updateBuyIn}
-            onAddUser={addUser}
-            onRenameUser={renameUser}
-            onAddParticipant={addParticipantToSession}
-            isEditingBuyIns={isEditingBuyIns}
-            buyInArrows={buyInArrows}
-            buyInLog={buyInLog}
-            handGames={handGames}
-            onRecordHand={recordHand}
-            onDeleteHand={deleteHand}
-            onStartEditBuyIns={startEditingBuyIns}
-            onFinishEditBuyIns={finishEditingBuyIns}
-            onVerifyPassword={verifyPassword}
-            autoPromptFortune={autoPromptFortune}
-            onFortunePromptHandled={() => setFortunePromptPending(false)}
-          />
-        )}
-        {activeTab === 'settle' && (
-          <SettleScreen
-            gameNumber={liveGameNumber}
-            session={session}
-            expenses={expenses}
             settlementRows={settlementRows}
-            finalFundAmount={finalFundAmount}
-            totalPayout={totalPayout}
-            totalBuyIns={totalBuyIns}
-            totalFinalChips={totalFinalChips}
-            onFinalAmountChange={updateFinalAmount}
-            onSaveFinalAmounts={saveFinalAmounts}
-            finalAmountsDirty={finalAmountsDirty}
-            finalAmountsSavedAt={finalAmountsSavedAt}
-            onAddExpense={addExpense}
-            onFinishSession={requestCompleteSettlement}
-            onSyncError={handleSyncError}
+            expenses={expenses}
+            grossFundContribution={grossFundContribution}
+            onClose={() => {
+              setShowSettlementModal(false);
+              clearExpenses();
+            }}
           />
-        )}
-        {activeTab === 'ranking' && (
-          <RankingScreen
-            users={users}
-            historyDates={historyDates}
-            historicalRecords={historicalRecords}
-            gameDetails={gameDetails}
-            onDeleteHistoryDate={deleteHistoryDate}
-            onVerifyPassword={verifyPassword}
+        ) : null}
+        {overheat ? <BuyInOverheatModal warning={overheat} onClose={() => setOverheat(null)} /> : null}
+        {milestone ? <MilestonePopup number={milestone.number} live={milestone.live} onClose={() => { setMilestone(null); setMilestoneResolved(true); }} /> : null}
+        {guideTargets.length > 0 ? (
+          <CoachMarks
+            targets={guideTargets}
+            onDismiss={() => setShowGuide(false)}
           />
-        )}
-        {activeTab === 'fund' && (
-          <FundScreen
-            fundEntries={fundEntries}
-            fundBalance={fundBalance}
-            onAddDeposit={addFundDeposit}
-            onDeleteFundEntry={deleteFundEntry}
-            onVerifyPassword={verifyPassword}
-          />
-        )}
-        <div className="h-64" />
-      </main>
-      {showSettlementModal ? (
-        <SettlementSummaryModal
-          gameNumber={gameNumberFor(session.date)}
-          session={session}
-          settlementRows={settlementRows}
-          expenses={expenses}
-          grossFundContribution={grossFundContribution}
-          onClose={() => {
-            setShowSettlementModal(false);
-            clearExpenses();
-          }}
+        ) : null}
+        <PasswordModal
+          config={passwordModalConfig}
+          onClose={() => setPasswordModalConfig(null)}
         />
-      ) : null}
-      {overheat ? <BuyInOverheatModal warning={overheat} onClose={() => setOverheat(null)} /> : null}
-      {milestone ? <MilestonePopup number={milestone.number} live={milestone.live} onClose={() => { setMilestone(null); setMilestoneResolved(true); }} /> : null}
-      {guideTargets.length > 0 ? (
-        <CoachMarks
-          targets={guideTargets}
-          onDismiss={() => setShowGuide(false)}
-        />
-      ) : null}
-      <PasswordModal
-        config={passwordModalConfig}
-        onClose={() => setPasswordModalConfig(null)}
-      />
-      <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />
-    </div>
+        <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} />
+      </div>
+    </ChampionsContext.Provider>
   );
 }
 
@@ -1190,6 +1196,7 @@ function GameScreen({
                     >
                       {player.name}
                     </button>
+                    <ChampionStars name={player.name} />
                     {ranked ? (
                       <TierBadge tier={ranked.tier} />
                     ) : null}
@@ -1561,6 +1568,53 @@ function TierTableModal({ totalRanked, onClose }: { totalRanked: number; onClose
 // Date results fit two badges on one row, so the longest tier name is shortened there.
 const shortTierLabel = (tier: Tier | null) => (tier?.label === '그랜드마스터' ? '그마' : undefined);
 
+// Top of the ranking card: a finished season's champion, the running season's open
+// title (decided once the year is over), or the roll of past champions on 전체.
+function SeasonChampionBanner({ season, champions, leader }: { season: string; champions: SeasonChampion[]; leader?: PlayerName }) {
+  if (season === 'ALL') {
+    if (champions.length === 0) return null;
+    return (
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-[#f3e3a6] bg-[#fffaf0] px-5 py-2.5" data-testid="banner-champion-roll">
+        <span className="mono shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-[#a07400]">🏆 hall of fame</span>
+        {champions.map((champion) => (
+          <span key={champion.season} className="shrink-0 whitespace-nowrap rounded-full border border-[#f0d77a] bg-white px-2 py-0.5 text-[11px] font-bold text-[#7a5600]">
+            <span className="mono text-[10px] text-[#a07400]">{champion.season.slice(2)}</span> {champion.name}
+          </span>
+        ))}
+      </div>
+    );
+  }
+  const champion = champions.find((item) => item.season === season);
+  if (!champion) {
+    return (
+      <div className="border-b border-dashed border-[#e8dca8] bg-[#fffcf3] px-5 py-3" data-testid="banner-champion-pending">
+        <p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#a07400]">🏆 {season} season champion</p>
+        <p className="mt-0.5 break-keep text-xs font-bold text-[#7a5600]">아직 미정 · {season}년이 끝나면 확정돼요</p>
+        {leader ? <p className="mt-0.5 text-[11px] text-[#a08a4a]">현재 1위 {leader}</p> : null}
+      </div>
+    );
+  }
+  return (
+    <div className="relative overflow-hidden border-b border-[#f0d77a] bg-[radial-gradient(circle_at_15%_0%,#fff8d6,#ffe58a_55%,#f5c542)] px-5 py-4" data-testid="banner-champion">
+      <span className="pointer-events-none absolute right-6 top-2 text-lg opacity-70">✨</span>
+      <span className="pointer-events-none absolute bottom-2 right-16 text-sm opacity-60">✨</span>
+      <div className="flex items-center gap-3">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/70 text-3xl shadow-[0_2px_10px_rgba(184,134,11,0.35)]">🏆</span>
+        <div className="min-w-0">
+          <p className="mono text-[10px] font-bold uppercase tracking-[0.16em] text-[#8a6100]">{season} season champion</p>
+          <p className="mt-0.5 flex items-center gap-1 text-xl font-extrabold tracking-[-0.04em] text-[#4a3500]">
+            {champion.name}
+            <ChampionStars name={champion.name} className="text-sm" />
+          </p>
+          <p className="mono text-[11px] font-bold text-[#8a6100]">
+            {formatManwon(Math.round(champion.net * 10) / 10)} · {champion.wins}승 {champion.played - champion.wins}패
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function RankingScreen({
   users,
   historyDates,
@@ -1639,6 +1693,8 @@ function RankingScreen({
   });
 
   const rankedPlayers = currentAllStats.filter((stat) => stat.played >= minPlayedThreshold);
+  const champions = useContext(ChampionsContext);
+  const seasonChampion = champions.find((champion) => champion.season === selectedSeason);
   const unrankedPlayers = currentAllStats.filter((stat) => stat.played < minPlayedThreshold);
 
   // Falls back to the latest game when the selection is gone (deleted, or not loaded yet).
@@ -1737,6 +1793,7 @@ function RankingScreen({
             <Trophy size={18} className="text-[#b38b1e]" />
           </div>
         </div>
+        <SeasonChampionBanner season={selectedSeason} champions={champions} leader={rankedPlayers[0]?.player.name} />
         <div data-share-scroll="true" className="overflow-x-auto">
           <div className="min-w-[650px] divide-y divide-[#ececf0]">
             {rankedPlayers.map((stat, index) => {
@@ -1758,15 +1815,19 @@ function RankingScreen({
               }
 
               return (
-                <div className="px-2.5 py-1.5" key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
+                <div className={`px-2.5 py-1.5 ${seasonChampion?.name === stat.player.name ? 'bg-gradient-to-r from-[#fff3c4] via-[#fffaf0] to-transparent' : ''}`} key={stat.player.name} data-testid={`row-ranking-${stat.player.name}`}>
                   <div className="grid grid-cols-[52px_178px_100px_80px_1fr] items-center gap-1.5 whitespace-nowrap">
                     <div className="flex items-center gap-1">
-                      <span className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rank === 1 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>
-                        {String(rank).padStart(2, '0')}
-                      </span>
+                      {seasonChampion?.name === stat.player.name ? (
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-b from-[#ffe58a] to-[#f5b700] text-sm shadow-[0_0_0_2px_#fff3c4,0_2px_6px_rgba(184,134,11,0.45)]" aria-label="시즌 우승">🏆</span>
+                      ) : (
+                        <span className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${rank === 1 ? 'bg-[#e9ef76] text-[#596313]' : 'bg-[#f1f1ee] text-[#858a9b]'}`}>
+                          {String(rank).padStart(2, '0')}
+                        </span>
+                      )}
                       <div className="flex w-5 justify-center">{rankChange}</div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
                       <button
                         type="button"
                         className="tilt-button mr-1 text-sm font-bold text-[#20253a] hover:underline"
@@ -1775,6 +1836,7 @@ function RankingScreen({
                       >
                         {stat.player.name}
                       </button>
+                      <ChampionStars name={stat.player.name} className="-ml-0.5 mr-0.5" />
                       <TierBadge tier={tier} label={shortTierLabel(tier)} />
                       <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} />
                     </div>
@@ -1859,7 +1921,7 @@ function RankingScreen({
                     <span className="mono flex h-7 w-7 items-center justify-center rounded-full bg-[#f1f1ee] text-xs font-bold text-[#858a9b]">
                       {String(index + 1).padStart(2, '0')}
                     </span>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
                       <button
                         type="button"
                         className="tilt-button mr-1 text-sm font-bold text-[#20253a] hover:underline"
@@ -1868,6 +1930,7 @@ function RankingScreen({
                       >
                         {stat.player.name}
                       </button>
+                      <ChampionStars name={stat.player.name} className="-ml-0.5 mr-0.5" />
                       <TierBadge tier={null} />
                       <StreakChip values={historicalRecords.find((record) => record.name === stat.player.name)?.values ?? []} />
                     </div>
@@ -1939,7 +2002,7 @@ function RankingScreen({
               const buyInCount = shownDetail?.buyIns?.[player.name];
               return (
                 <div key={player.name} className="col-span-full grid grid-cols-subgrid items-center px-4 py-3.5 max-[379px]:px-3" data-testid={`row-date-result-${player.name}`}>
-                  <span className="whitespace-nowrap pr-3 text-sm font-bold text-[#20253a] max-[379px]:pr-2">{player.name}</span>
+                  <span className="flex items-center gap-0.5 whitespace-nowrap pr-3 text-sm font-bold text-[#20253a] max-[379px]:pr-2">{player.name}<ChampionStars name={player.name} /></span>
                   <TierBadge tier={tierShift === 0 ? after : before} label={shortTierLabel(tierShift === 0 ? after : before)} className="justify-self-start" />
                   <span className="flex justify-center px-2 max-[379px]:px-1" data-testid={`tier-change-${player.name}`}>
                     <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-full ${tierShift > 0 ? 'bg-[#e7f6ec] text-[#16a34a]' : tierShift < 0 ? 'bg-[#fdeceb] text-[#dc2626]' : 'bg-[#f1f2f5] text-[#a8adba]'}`}>
