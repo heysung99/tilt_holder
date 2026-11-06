@@ -2011,7 +2011,7 @@ function RankingScreen({
                 : tierLevel(after.label) - tierLevel(before.label);
               const buyInCount = shownDetail?.buyIns?.[player.name];
               return (
-                <div key={player.name} className="col-span-full grid grid-cols-subgrid items-center px-4 py-3.5 max-[379px]:px-3" data-testid={`row-date-result-${player.name}`}>
+                <div key={player.name} className="col-span-full grid grid-cols-subgrid items-center px-4 py-2 max-[379px]:px-3" data-testid={`row-date-result-${player.name}`}>
                   <span className="flex items-center gap-0.5 whitespace-nowrap pr-3 text-sm font-bold text-[#20253a] max-[379px]:pr-2">{player.name}<ChampionTrophies name={player.name} /></span>
                   <TierBadge tier={tierShift === 0 ? after : before} label={shortTierLabel(tierShift === 0 ? after : before)} className="justify-self-start" />
                   <span className="flex justify-center px-2 max-[379px]:px-1" data-testid={`tier-change-${player.name}`}>
@@ -2030,11 +2030,11 @@ function RankingScreen({
                   )}
                   <span />
                   <div className="pl-2.5 text-right max-[379px]:pl-2">
-                    <p className={`mono whitespace-nowrap text-[15px] font-bold tracking-[-0.04em] max-[379px]:text-[13px] ${value > 0 ? 'text-[#3f7a1f]' : value < 0 ? 'text-[#c0392b]' : 'text-[#858a9b]'}`} data-testid={`text-date-amount-${player.name}`}>
+                    <p className={`mono whitespace-nowrap text-[15px] font-bold leading-tight tracking-[-0.04em] max-[379px]:text-[13px] ${value > 0 ? 'text-[#3f7a1f]' : value < 0 ? 'text-[#c0392b]' : 'text-[#858a9b]'}`} data-testid={`text-date-amount-${player.name}`}>
                       {formatManwon(value)}
                     </p>
                     {buyInCount !== undefined ? (
-                      <p className="mt-0.5 whitespace-nowrap text-[11px] text-[#9aa0ae]" data-testid={`text-date-buyins-${player.name}`}>바이인 {buyInCount}회</p>
+                      <p className="whitespace-nowrap text-[11px] leading-tight text-[#9aa0ae]" data-testid={`text-date-buyins-${player.name}`}>바이인 {buyInCount}회</p>
                     ) : null}
                   </div>
                 </div>
