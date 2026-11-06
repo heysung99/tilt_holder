@@ -20,6 +20,7 @@ import CoachMarks from '@/components/coach-marks';
 import TierBadge from '@/components/tier-badge';
 import StreakChip from '@/components/streak-chip';
 import ChampionTrophies from '@/components/champion-trophies';
+import { localDateKey } from '@/lib/daily-fortune';
 import { ChampionsContext, type SeasonChampion, seasonChampions } from '@/lib/champions';
 import DailyFortune from '@/components/daily-fortune';
 import MilestonePopup, { markMilestoneSeen, milestoneSeenToday } from '@/components/milestone-popup';
@@ -126,6 +127,8 @@ type FundEntry = {
   meta: string;
   amount: number;
 };
+
+type FundRecordDraft = { kind: 'deposit' | 'spend'; date: string; title: string; amount: number };
 
 type SettlementRow = {
   name: PlayerName;
@@ -682,9 +685,13 @@ function AppShell() {
     api('/api/fund', { method: 'POST', body: fundItem }).catch(handleSyncError);
   };
 
-  const addFundDeposit = (amount: number) => {
-    const id = `deposit-${Date.now()}`;
-    const fundItem = { id, title: '공금 직접 입금', meta: `오늘 · ${formatSessionDate(session.date)}`, amount };
+  // A hand-written fund record, after the password: money put in (공금 입금) or spent from
+  // the fund (지출), labelled like the ones settlements write.
+  const addFundRecord = ({ kind, date, title, amount }: FundRecordDraft) => {
+    const id = `${kind === 'deposit' ? 'deposit' : 'spend'}-${Date.now()}`;
+    const fundItem = kind === 'deposit'
+      ? { id, title: title || '공금 직접 입금', meta: `공금 입금 · ${formatSessionDate(date)}`, amount }
+      : { id, title: title || '공금 지출', meta: `모임 공금 · ${formatSessionDate(date)}`, amount: -amount };
     setFundEntries((current) => [...current, fundItem]);
 
     api('/api/fund', { method: 'POST', body: fundItem }).catch(handleSyncError);
@@ -988,7 +995,7 @@ function AppShell() {
             <FundScreen
               fundEntries={fundEntries}
               fundBalance={fundBalance}
-              onAddDeposit={addFundDeposit}
+              onAddRecord={addFundRecord}
               onDeleteFundEntry={deleteFundEntry}
               onVerifyPassword={verifyPassword}
             />
@@ -2061,17 +2068,20 @@ function RankingScreen({
 function FundScreen({
   fundEntries,
   fundBalance,
-  onAddDeposit,
+  onAddRecord,
   onDeleteFundEntry,
   onVerifyPassword,
 }: {
   fundEntries: FundEntry[];
   fundBalance: number;
-  onAddDeposit: (amount: number) => void;
+  onAddRecord: (record: FundRecordDraft) => void;
   onDeleteFundEntry: (id: string) => void;
   onVerifyPassword: (title: string, onSuccess: () => void) => void;
 }) {
   const [showFundForm, setShowFundForm] = useState(false);
+  const [fundKind, setFundKind] = useState<FundRecordDraft['kind']>('deposit');
+  const [fundDate, setFundDate] = useState(() => localDateKey());
+  const [fundTitle, setFundTitle] = useState('');
   const [fundAmount, setFundAmount] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAllFund, setShowAllFund] = useState(false);
@@ -2113,7 +2123,51 @@ function FundScreen({
         <div className="flex items-start justify-between"><div><p className="text-sm font-semibold text-[#8e5347]">현재 공금 잔액</p><p className="mono mt-2 text-[34px] font-bold tracking-[-0.09em] text-[#20253a]">{formatWon(fundBalance)}</p></div><div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-[#bd604d]"><Landmark size={20} /></div></div>
       </section>
       <div className="rise-in delay-2 mt-6 flex items-center justify-between"><div><p className="mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#697087]">fund activity</p><h3 className="mt-1 text-lg font-bold tracking-[-0.04em] text-[#20253a]">최근 내역</h3></div><button type="button" className="tilt-button flex items-center gap-1.5 rounded-full border border-[#dfe1e7] bg-white px-3.5 py-2.5 text-xs font-bold text-[#2d3d8f]" data-testid="button-add-fund" onClick={() => setShowFundForm((current) => !current)}><Plus size={15} /> 기록 추가</button></div>
-      {showFundForm ? <form className="rise-in mt-3 flex gap-2 rounded-[18px] border border-[#f0d1c7] bg-[#fff8f5] p-3" data-testid="form-add-fund" onSubmit={(event) => { event.preventDefault(); const amount = Number(fundAmount.replace(/[^0-9]/g, '')); if (amount > 0) { onAddDeposit(amount); setShowFundForm(false); setFundAmount(''); } }}><input value={fundAmount} onChange={(event) => setFundAmount(event.target.value)} inputMode="numeric" className="h-11 min-w-0 flex-1 rounded-xl border border-[#ecd9d3] bg-white px-3 text-sm outline-none focus:border-[#bd604d]" placeholder="입금 금액" data-testid="input-fund-amount" /><button type="submit" className="tilt-button rounded-xl bg-[#bd604d] px-4 text-xs font-bold text-white" data-testid="button-save-fund">추가</button></form> : null}
+      {showFundForm ? (
+        <form
+          className="rise-in mt-3 space-y-2.5 rounded-[18px] border border-[#f0d1c7] bg-[#fff8f5] p-3"
+          data-testid="form-add-fund"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const amount = Number(fundAmount.replace(/[^0-9]/g, ''));
+            if (!(amount > 0) || !fundDate) return;
+            const record = { kind: fundKind, date: fundDate, title: fundTitle.trim(), amount };
+            onVerifyPassword(fundKind === 'deposit' ? '공금 입금 기록' : '공금 지출 기록', () => {
+              onAddRecord(record);
+              setShowFundForm(false);
+              setFundTitle('');
+              setFundAmount('');
+            });
+          }}
+        >
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-white p-1" role="radiogroup" aria-label="기록 종류">
+            {([['deposit', '공금 입금'], ['spend', '지출']] as const).map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                role="radio"
+                aria-checked={fundKind === kind}
+                onClick={() => setFundKind(kind)}
+                className={`tilt-button rounded-lg py-2 text-xs font-bold ${fundKind === kind ? (kind === 'deposit' ? 'bg-[#657117] text-white' : 'bg-[#bd604d] text-white') : 'text-[#8e5347]'}`}
+                data-testid={`button-fund-kind-${kind}`}
+              >
+                {kind === 'deposit' ? '＋ ' : '－ '}{label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-xs font-bold text-[#8e5347]">
+            <label htmlFor="fund-date">날짜</label>
+            <input id="fund-date" type="date" value={fundDate} onChange={(event) => setFundDate(event.target.value)} className="h-10 min-w-0 rounded-xl border border-[#ecd9d3] bg-white px-3 text-sm font-normal text-[#20253a] outline-none focus:border-[#bd604d]" data-testid="input-fund-date" />
+            <label htmlFor="fund-title">{fundKind === 'deposit' ? '입금명' : '사용명'}</label>
+            <input id="fund-title" value={fundTitle} onChange={(event) => setFundTitle(event.target.value)} className="h-10 min-w-0 rounded-xl border border-[#ecd9d3] bg-white px-3 text-sm font-normal text-[#20253a] outline-none focus:border-[#bd604d]" placeholder={fundKind === 'deposit' ? '예: 회비 입금 (비우면 공금 직접 입금)' : '예: 간식, 장소 대여'} data-testid="input-fund-title" />
+            <label htmlFor="fund-amount">금액</label>
+            <input id="fund-amount" value={fundAmount} onChange={(event) => setFundAmount(event.target.value)} inputMode="numeric" className="h-10 min-w-0 rounded-xl border border-[#ecd9d3] bg-white px-3 text-sm font-normal text-[#20253a] outline-none focus:border-[#bd604d]" placeholder="원 단위 숫자" data-testid="input-fund-amount" />
+          </div>
+          <button type="submit" className={`tilt-button w-full rounded-xl py-2.5 text-xs font-bold text-white ${fundKind === 'deposit' ? 'bg-[#657117]' : 'bg-[#bd604d]'}`} data-testid="button-save-fund">
+            비밀번호 확인 후 {fundKind === 'deposit' ? '입금' : '지출'} 기록
+          </button>
+        </form>
+      ) : null}
       <div className="rise-in delay-3 mt-3 tilt-card divide-y divide-[#ececf0]">
         {visibleFundEntries.map((entry) => <FundRow key={entry.id} entry={entry} />)}
       </div>
