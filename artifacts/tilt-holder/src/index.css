@@ -84,6 +84,11 @@
     overscroll-behavior-y: none;
   }
   button, a, input { -webkit-tap-highlight-color: transparent; }
+  /* iPhone zooms the page in on any focused field under 16px and doesn't zoom back
+     out, which also knocks the fixed bottom menu out of place. iOS-only. */
+  @supports (-webkit-touch-callout: none) {
+    input, select, textarea { font-size: max(16px, 1em) !important; }
+  }
 }
 
 @layer utilities {

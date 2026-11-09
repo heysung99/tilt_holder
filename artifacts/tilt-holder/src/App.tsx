@@ -321,6 +321,26 @@ function AppShell() {
   }, []);
 
   useEffect(() => {
+    // iOS Safari can leave `position: fixed` bars (the bottom menu) stranded mid-screen
+    // after the keyboard closes, until the page scrolls again. Once focus leaves a text
+    // field and nothing else takes it, a no-op scroll makes it lay them out again.
+    const isTextField = (element: Element | null) => element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement;
+    let timer = 0;
+    const handleFocusOut = (event: FocusEvent) => {
+      if (!isTextField(event.target as Element | null)) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (!isTextField(document.activeElement)) window.scrollTo(window.scrollX, window.scrollY);
+      }, 120);
+    };
+    document.addEventListener('focusout', handleFocusOut);
+    return () => {
+      document.removeEventListener('focusout', handleFocusOut);
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
     const handler = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
