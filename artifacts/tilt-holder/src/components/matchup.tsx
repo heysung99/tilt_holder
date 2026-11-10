@@ -9,6 +9,7 @@ import {
   MATCHUP_KINDS,
   headToHeadRate,
   matchupKind,
+  matchupScore,
   matchupVerdict,
   subjectParticle,
 } from '@/lib/player-stats';
@@ -68,8 +69,9 @@ function BestWorstCard({ kind, name, matchup, fallback, onPick }: { kind: 'best'
 }
 
 // Everyone who has shared at least MATCHUP_MIN_GAMES tables with the player, by their
-// money in the games they shared, most won first. Best is the top 든든 국밥 or best
-// partner and worst the bottom 천적 or worst partner; with none, the list's ends stand in.
+// money in the games they shared, most won first. Best is the 든든 국밥 or best partner
+// with the highest shrunk per-game money and worst the 천적 or worst partner with the
+// lowest; with none, the ends of that ranking stand in.
 export function MatchupPicker({
   playerName,
   users,
@@ -93,10 +95,13 @@ export function MatchupPicker({
 
   const good = (item: (typeof opponents)[number]) => ['gukbap', 'bestPartner'].includes(matchupKind(item.matchup) ?? '');
   const bad = (item: (typeof opponents)[number]) => ['nemesis', 'worstPartner'].includes(matchupKind(item.matchup) ?? '');
-  // A stand-in never carries the opposite tag (no 최고의 파트너 under 그나마 어려운 상대).
-  const bestTagged = opponents.find(good);
-  const best = bestTagged ?? opponents.find((item) => !bad(item));
-  const reversed = [...opponents].reverse();
+  // The cards keep ranking by per-game money (shrunk for few games), apart from the
+  // list's order by total. A stand-in never carries the opposite tag (no 최고의 파트너
+  // under 그나마 어려운 상대).
+  const byScore = [...opponents].sort((a, b) => matchupScore(b.matchup) - matchupScore(a.matchup) || headToHeadRate(b.matchup) - headToHeadRate(a.matchup));
+  const bestTagged = byScore.find(good);
+  const best = bestTagged ?? byScore.find((item) => !bad(item));
+  const reversed = [...byScore].reverse();
   const worstTagged = reversed.find((item) => item !== best && bad(item));
   const worst = worstTagged ?? reversed.find((item) => item !== best && !good(item));
 
