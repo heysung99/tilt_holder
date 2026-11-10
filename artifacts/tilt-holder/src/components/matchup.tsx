@@ -118,8 +118,8 @@ export function MatchupPicker({
         {([
           ['bestPartner', '둘 다 따요'],
           ['worstPartner', '둘 다 털려요'],
-          ['gukbap', '나만 따고 이겨요'],
-          ['nemesis', '상대만 따고 져요'],
+          ['gukbap', '나만 따요'],
+          ['nemesis', '상대만 따요'],
         ] as const).map(([kind, text]) => (
           <p key={kind} className="min-w-0 whitespace-nowrap">
             <span className={`mr-0.5 rounded px-1 font-extrabold ${KIND_TONES[kind]}`}>{MATCHUP_KINDS[kind].emoji}{MATCHUP_KINDS[kind].label}</span>

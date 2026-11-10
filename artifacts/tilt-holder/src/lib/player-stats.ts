@@ -222,23 +222,22 @@ export const headToHeadRate = (matchup: Matchup) => {
 const MATCHUP_SHRINK = 5;
 export const matchupScore = (matchup: Matchup) => (matchup.aAvgWith * matchup.together) / (matchup.together + MATCHUP_SHRINK);
 
-// A pair read from both sides at once. Money in the shared games decides partners: both
-// up is the best partnership, both down the worst. When one is up and the other isn't,
-// the head-to-head has to agree too: winning it and profiting while they don't makes
-// them a's 든든 국밥 (and a their 천적), the mirror image makes them a's 천적.
+// A pair read from both sides at once, by the money each made in the games they shared:
+// both up is the best partnership, both down the worst. When only a is up, b is a's
+// 든든 국밥 (and a is b's 천적); when only b is up, b is a's 천적. Who finished ahead
+// more often doesn't change the tag.
 export type MatchupKind = 'gukbap' | 'nemesis' | 'bestPartner' | 'worstPartner';
 export const MATCHUP_KINDS: Record<MatchupKind, { emoji: string; label: string; detail: string }> = {
-  gukbap: { emoji: '🍲', label: '든든 국밥', detail: '맞대결도 이기고 돈도 내 쪽으로 와요' },
-  nemesis: { emoji: '😈', label: '천적', detail: '맞대결도 지고 돈도 상대 쪽으로 가요' },
+  gukbap: { emoji: '🍲', label: '든든 국밥', detail: '같이 치면 나는 따고 상대는 잃어요' },
+  nemesis: { emoji: '😈', label: '천적', detail: '같이 치면 상대는 따고 나는 잃어요' },
   bestPartner: { emoji: '🤝', label: '최고의 파트너', detail: '같이 치면 둘 다 따요' },
   worstPartner: { emoji: '💀', label: '최악의 파트너', detail: '같이 치면 둘 다 털려요' },
 };
 export function matchupKind(matchup: Matchup): MatchupKind | null {
   if (matchup.aSum > 0 && matchup.bSum > 0) return 'bestPartner';
   if (matchup.aSum < 0 && matchup.bSum < 0) return 'worstPartner';
-  const rate = headToHeadRate(matchup);
-  if (matchup.aSum > 0 && rate >= 0.5) return 'gukbap';
-  if (matchup.bSum > 0 && rate < 0.5) return 'nemesis';
+  if (matchup.aSum > 0) return 'gukbap';
+  if (matchup.bSum > 0) return 'nemesis';
   return null;
 }
 
@@ -254,8 +253,12 @@ export function matchupVerdict(a: PlayerName, b: PlayerName, matchup: Matchup) {
       ? `${b}${subjectParticle(b)} ${a}의 천적`
       : kind
         ? `${a}·${b} ${MATCHUP_KINDS[kind].label}`
-        : '승률과 돈이 엇갈리는 사이';
-  const summary = kind ? MATCHUP_KINDS[kind].detail : '맞대결 결과와 돈의 방향이 달라요';
+        : '팽팽한 사이';
+  const summary = kind === 'gukbap'
+    ? `같이 치면 ${a}${topicParticle(a)} 따고 ${b}${topicParticle(b)} 잃어요`
+    : kind === 'nemesis'
+      ? `같이 치면 ${b}${topicParticle(b)} 따고 ${a}${topicParticle(a)} 잃어요`
+      : kind ? MATCHUP_KINDS[kind].detail : '어느 쪽으로도 돈이 기울지 않았어요';
   const detail = `${matchup.together}판 중 ${a} ${matchup.aAhead}번, ${b} ${matchup.bAhead}번 더 많이 땄고, 합계는 ${a} ${formatManwon(matchup.aSum)} · ${b} ${formatManwon(matchup.bSum)}. ${summary}.`;
   return { emoji: kind ? MATCHUP_KINDS[kind].emoji : '⚖️', title, detail };
 }
