@@ -217,11 +217,6 @@ export const headToHeadRate = (matchup: Matchup) => {
   return decided ? matchup.aAhead / decided : 0.5;
 };
 
-// How much a few shared games are trusted: the per-game average is pulled toward 0
-// as if MATCHUP_SHRINK games at ±0 had been played too.
-const MATCHUP_SHRINK = 5;
-export const matchupScore = (matchup: Matchup) => (matchup.aAvgWith * matchup.together) / (matchup.together + MATCHUP_SHRINK);
-
 // A pair read from both sides at once. Money in the shared games decides partners: both
 // up is the best partnership, both down the worst. When one is up and the other isn't,
 // the head-to-head has to agree too: winning it and profiting while they don't makes

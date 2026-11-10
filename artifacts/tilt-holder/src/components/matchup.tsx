@@ -9,8 +9,8 @@ import {
   MATCHUP_KINDS,
   headToHeadRate,
   matchupKind,
-  matchupScore,
   matchupVerdict,
+  subjectParticle,
 } from '@/lib/player-stats';
 
 const RECENT_GAMES = 5;
@@ -68,7 +68,7 @@ function BestWorstCard({ kind, name, matchup, fallback, onPick }: { kind: 'best'
 }
 
 // Everyone who has shared at least MATCHUP_MIN_GAMES tables with the player, by their
-// per-game money against them (shrunk for few games). Best is the top 든든 국밥 or best
+// money in the games they shared, most won first. Best is the top 든든 국밥 or best
 // partner and worst the bottom 천적 or worst partner; with none, the list's ends stand in.
 export function MatchupPicker({
   playerName,
@@ -85,7 +85,7 @@ export function MatchupPicker({
     .filter((user) => user.name !== playerName)
     .map((user) => ({ name: user.name, matchup: computeMatchup(playerName, user.name, historicalRecords) }))
     .filter((item) => item.matchup.together >= MATCHUP_MIN_GAMES)
-    .sort((a, b) => matchupScore(b.matchup) - matchupScore(a.matchup) || headToHeadRate(b.matchup) - headToHeadRate(a.matchup));
+    .sort((a, b) => b.matchup.aSum - a.matchup.aSum || headToHeadRate(b.matchup) - headToHeadRate(a.matchup));
 
   if (opponents.length === 0) {
     return <p className="mt-6 text-sm text-[#858a9b]">아직 {MATCHUP_MIN_GAMES}판 이상 함께한 사람이 없어요.</p>;
@@ -107,7 +107,7 @@ export function MatchupPicker({
         {worst ? <BestWorstCard kind="worst" name={worst.name} matchup={worst.matchup} fallback={!worstTagged} onPick={onPick} /> : null}
       </div>
       <p className="mt-4 text-xs leading-relaxed text-[#858a9b]">
-        {MATCHUP_MIN_GAMES}판 이상 함께한 상대만, {playerName}의 판당 평균이 높은 순이에요(함께한 판이 적으면 0 쪽으로 보정).
+        {MATCHUP_MIN_GAMES}판 이상 함께한 상대만, 함께한 판에서 {playerName}{subjectParticle(playerName)} 딴 금액이 많은 순이에요.
       </p>
       <div className="mt-2 grid grid-cols-2 gap-x-1 gap-y-1 text-[10px] tracking-[-0.02em] text-[#697087]">
         {([
